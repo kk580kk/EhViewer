@@ -36,6 +36,21 @@ public class ReaderController {
         this.currentIndex = this.imageNames.isEmpty() ? -1 : 0;
     }
 
+    public void openArchive(File archiveFile) throws IOException {
+        close();
+        String fileName = archiveFile.getName().toLowerCase();
+        if (fileName.endsWith(".zip") || fileName.endsWith(".cbz")) {
+            this.imageSource = new ZipImageSource(archiveFile);
+        } else if (fileName.endsWith(".rar") || fileName.endsWith(".cbr")) {
+            this.imageSource = new RarImageSource(archiveFile);
+        } else {
+            throw new IOException("Unsupported archive format: " + fileName);
+        }
+        this.imageNames = new ArrayList<>(imageSource.getImageNames());
+        Collections.sort(this.imageNames, new NaturalOrderComparator());
+        this.currentIndex = this.imageNames.isEmpty() ? -1 : 0;
+    }
+
     public boolean hasImages() {
         return currentIndex >= 0 && currentIndex < imageNames.size();
     }
@@ -75,6 +90,22 @@ public class ReaderController {
     public String getCurrentName() {
         if (!hasImages()) return null;
         return imageNames.get(currentIndex);
+    }
+
+    public boolean goToFirst() {
+        if (!imageNames.isEmpty()) {
+            currentIndex = 0;
+            return true;
+        }
+        return false;
+    }
+
+    public boolean goToLast() {
+        if (!imageNames.isEmpty()) {
+            currentIndex = imageNames.size() - 1;
+            return true;
+        }
+        return false;
     }
 
     public void close() {

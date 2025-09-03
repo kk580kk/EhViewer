@@ -39,7 +39,9 @@ public class DirectoryImageSource implements ImageSource {
 
     private static boolean isSupportedImage(File file) {
         String name = file.getName().toLowerCase(Locale.ROOT);
-        return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || name.endsWith(".gif");
+        return name.endsWith(".jpg") || name.endsWith(".jpeg") || name.endsWith(".png") || 
+               name.endsWith(".gif") || name.endsWith(".bmp") || name.endsWith(".webp") ||
+               name.endsWith(".tiff") || name.endsWith(".tif");
     }
 
     @Override
