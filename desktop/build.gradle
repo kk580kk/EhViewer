@@ -14,7 +14,7 @@ dependencies {
 }
 
 application {
-    mainClass = 'com.hippo.desktop.Main'
+    mainClassName = 'com.hippo.desktop.Main'
 }
 
 tasks.withType(JavaCompile) {
