@@ -9,12 +9,14 @@ import javax.swing.JMenuBar;
 import javax.swing.JMenuItem;
 import javax.swing.JOptionPane;
 import javax.swing.JPanel;
+import javax.swing.KeyStroke;
 import javax.swing.SwingUtilities;
 import javax.swing.WindowConstants;
 import javax.swing.filechooser.FileNameExtensionFilter;
 import java.awt.BorderLayout;
 import java.awt.Dimension;
 import java.awt.FlowLayout;
+import java.awt.event.KeyEvent;
 import java.io.File;
 
 public class Main {
@@ -32,16 +34,32 @@ public class Main {
             JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
             JButton prev = new JButton("Prev");
             JButton next = new JButton("Next");
+            JButton zoomIn = new JButton("Zoom In");
+            JButton zoomOut = new JButton("Zoom Out");
+            JButton fitWindow = new JButton("Fit Window");
+            JButton actualSize = new JButton("Actual Size");
             JLabel status = new JLabel("No book opened");
             bottomBar.add(prev);
             bottomBar.add(next);
+            bottomBar.add(new javax.swing.JSeparator(javax.swing.SwingConstants.VERTICAL));
+            bottomBar.add(zoomIn);
+            bottomBar.add(zoomOut);
+            bottomBar.add(fitWindow);
+            bottomBar.add(actualSize);
+            bottomBar.add(new javax.swing.JSeparator(javax.swing.SwingConstants.VERTICAL));
             bottomBar.add(status);
             frame.add(bottomBar, BorderLayout.SOUTH);
 
             JMenuBar menuBar = new JMenuBar();
             JMenu fileMenu = new JMenu("File");
+            fileMenu.setMnemonic(KeyEvent.VK_F);
+            
             JMenuItem openDirItem = new JMenuItem("Open Folder...");
+            openDirItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, java.awt.event.InputEvent.CTRL_DOWN_MASK));
+            
             JMenuItem openZipItem = new JMenuItem("Open Zip...");
+            openZipItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
+            
             fileMenu.add(openDirItem);
             fileMenu.add(openZipItem);
             menuBar.add(fileMenu);
@@ -63,6 +81,64 @@ public class Main {
 
             prev.addActionListener(e -> { if (controller.previous()) refresh.run(); });
             next.addActionListener(e -> { if (controller.next()) refresh.run(); });
+            zoomIn.addActionListener(e -> imagePanel.zoomIn());
+            zoomOut.addActionListener(e -> imagePanel.zoomOut());
+            fitWindow.addActionListener(e -> imagePanel.fitToWindow());
+            actualSize.addActionListener(e -> imagePanel.resetZoom());
+            
+            // Add keyboard shortcuts
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_LEFT, 0), "previous");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_RIGHT, 0), "next");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_SPACE, 0), "next");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_UP, 0), "previous");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_PAGE_DOWN, 0), "next");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_PLUS, java.awt.event.InputEvent.CTRL_DOWN_MASK), "zoomIn");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_EQUALS, java.awt.event.InputEvent.CTRL_DOWN_MASK), "zoomIn");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_MINUS, java.awt.event.InputEvent.CTRL_DOWN_MASK), "zoomOut");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_0, java.awt.event.InputEvent.CTRL_DOWN_MASK), "fitWindow");
+            imagePanel.getInputMap(javax.swing.JComponent.WHEN_IN_FOCUSED_WINDOW).put(KeyStroke.getKeyStroke(KeyEvent.VK_1, java.awt.event.InputEvent.CTRL_DOWN_MASK), "actualSize");
+            
+            imagePanel.getActionMap().put("previous", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    if (controller.previous()) refresh.run();
+                }
+            });
+            
+            imagePanel.getActionMap().put("next", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    if (controller.next()) refresh.run();
+                }
+            });
+            
+            imagePanel.getActionMap().put("zoomIn", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    imagePanel.zoomIn();
+                }
+            });
+            
+            imagePanel.getActionMap().put("zoomOut", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    imagePanel.zoomOut();
+                }
+            });
+            
+            imagePanel.getActionMap().put("fitWindow", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    imagePanel.fitToWindow();
+                }
+            });
+            
+            imagePanel.getActionMap().put("actualSize", new javax.swing.AbstractAction() {
+                @Override
+                public void actionPerformed(java.awt.event.ActionEvent e) {
+                    imagePanel.resetZoom();
+                }
+            });
 
             openDirItem.addActionListener(e -> {
                 JFileChooser chooser = new JFileChooser();
@@ -81,7 +157,7 @@ public class Main {
             openZipItem.addActionListener(e -> {
                 JFileChooser chooser = new JFileChooser();
                 chooser.setFileSelectionMode(JFileChooser.FILES_ONLY);
-                chooser.setFileFilter(new FileNameExtensionFilter("Archives", "zip", "cbz"));
+                chooser.setFileFilter(new FileNameExtensionFilter("Archives", "zip", "cbz", "cbr"));
                 if (chooser.showOpenDialog(frame) == JFileChooser.APPROVE_OPTION) {
                     File file = chooser.getSelectedFile();
                     try {

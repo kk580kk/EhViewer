@@ -27,7 +27,8 @@ public class ZipImageSource implements ImageSource {
             if (entry.isDirectory()) continue;
             String name = entry.getName();
             String lname = name.toLowerCase(Locale.ROOT);
-            if (lname.endsWith(".jpg") || lname.endsWith(".jpeg") || lname.endsWith(".png") || lname.endsWith(".gif")) {
+            if (lname.endsWith(".jpg") || lname.endsWith(".jpeg") || lname.endsWith(".png") || 
+                lname.endsWith(".gif") || lname.endsWith(".bmp") || lname.endsWith(".webp")) {
                 names.add(name);
             }
         }
