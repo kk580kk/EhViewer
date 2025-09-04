@@ -18,6 +18,7 @@ import java.awt.Dimension;
 import java.awt.FlowLayout;
 import java.awt.event.KeyEvent;
 import java.io.File;
+import java.util.List;
 
 public class Main {
     public static void main(String[] args) {
@@ -30,6 +31,9 @@ public class Main {
             ReaderController controller = new ReaderController();
             ImagePanel imagePanel = new ImagePanel();
             frame.add(imagePanel, BorderLayout.CENTER);
+
+            // Recent files manager
+            RecentFilesManager recentFiles = new RecentFilesManager(Main.class);
 
             JPanel bottomBar = new JPanel(new FlowLayout(FlowLayout.LEFT));
             JButton prev = new JButton("Prev");
@@ -60,8 +64,14 @@ public class Main {
             JMenuItem openZipItem = new JMenuItem("Open Zip...");
             openZipItem.setAccelerator(KeyStroke.getKeyStroke(KeyEvent.VK_O, java.awt.event.InputEvent.CTRL_DOWN_MASK | java.awt.event.InputEvent.SHIFT_DOWN_MASK));
             
+            JMenu recentMenu = new JMenu("Recent Files");
+            recentMenu.setMnemonic(KeyEvent.VK_R);
+            recentMenu.setEnabled(false);
+            
             fileMenu.add(openDirItem);
             fileMenu.add(openZipItem);
+            fileMenu.addSeparator();
+            fileMenu.add(recentMenu);
             menuBar.add(fileMenu);
             frame.setJMenuBar(menuBar);
 
@@ -78,6 +88,51 @@ public class Main {
                     JOptionPane.showMessageDialog(frame, "Failed to load image: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
             };
+
+            // Helper to refresh recent menu
+            final Runnable[] refreshRecentMenu = new Runnable[1];
+            refreshRecentMenu[0] = () -> {
+                recentMenu.removeAll();
+                List<String> recents = recentFiles.get();
+                if (recents.isEmpty()) {
+                    recentMenu.setEnabled(false);
+                    return;
+                }
+                recentMenu.setEnabled(true);
+                for (String path : recents) {
+                    JMenuItem item = new JMenuItem(path);
+                    item.addActionListener(ev -> {
+                        File target = new File(path);
+                        if (!target.exists()) {
+                            JOptionPane.showMessageDialog(frame, "File not found: " + path, "Error", JOptionPane.ERROR_MESSAGE);
+                            recentFiles.clear();
+                            refreshRecentMenu[0].run();
+                            return;
+                        }
+                        try {
+                            if (target.isDirectory()) {
+                                controller.openDirectory(target);
+                            } else {
+                                controller.openZip(target);
+                            }
+                            recentFiles.add(path);
+                            refreshRecentMenu[0].run();
+                            refresh.run();
+                        } catch (Exception ex) {
+                            JOptionPane.showMessageDialog(frame, "Failed to open: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
+                        }
+                    });
+                    recentMenu.add(item);
+                }
+                recentMenu.addSeparator();
+                JMenuItem clearItem = new JMenuItem("Clear List");
+                clearItem.addActionListener(ev -> {
+                    recentFiles.clear();
+                    refreshRecentMenu[0].run();
+                });
+                recentMenu.add(clearItem);
+            };
+            refreshRecentMenu[0].run();
 
             prev.addActionListener(e -> { if (controller.previous()) refresh.run(); });
             next.addActionListener(e -> { if (controller.next()) refresh.run(); });
@@ -147,6 +202,8 @@ public class Main {
                     File dir = chooser.getSelectedFile();
                     try {
                         controller.openDirectory(dir);
+                        recentFiles.add(dir.getAbsolutePath());
+                        refreshRecentMenu[0].run();
                         refresh.run();
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(frame, "Failed to open: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
@@ -162,6 +219,8 @@ public class Main {
                     File file = chooser.getSelectedFile();
                     try {
                         controller.openZip(file);
+                        recentFiles.add(file.getAbsolutePath());
+                        refreshRecentMenu[0].run();
                         refresh.run();
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(frame, "Failed to open: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
