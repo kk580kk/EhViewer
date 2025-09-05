@@ -8,6 +8,7 @@ import java.io.InputStream;
 import java.util.ArrayList;
 import java.util.Collections;
 import java.util.List;
+import java.io.FileNotFoundException;
 
 public class ReaderController {
 
@@ -20,20 +21,26 @@ public class ReaderController {
         this.currentIndex = -1;
     }
 
-    public void openDirectory(File directory) throws IOException {
+    public void openDirectory(File directory) throws IOException, AppException {
         close();
         this.imageSource = new DirectoryImageSource(directory);
         this.imageNames = new ArrayList<>(imageSource.getImageNames());
         Collections.sort(this.imageNames, new NaturalOrderComparator());
-        this.currentIndex = this.imageNames.isEmpty() ? -1 : 0;
+        if (this.imageNames.isEmpty()) {
+            throw new EmptyFolderException(directory.getAbsolutePath());
+        }
+        this.currentIndex = 0;
     }
 
-    public void openZip(File zipFile) throws IOException {
+    public void openZip(File zipFile) throws IOException, AppException {
         close();
         this.imageSource = new ZipImageSource(zipFile);
         this.imageNames = new ArrayList<>(imageSource.getImageNames());
         Collections.sort(this.imageNames, new NaturalOrderComparator());
-        this.currentIndex = this.imageNames.isEmpty() ? -1 : 0;
+        if (this.imageNames.isEmpty()) {
+            throw new EmptyFolderException(zipFile.getAbsolutePath());
+        }
+        this.currentIndex = 0;
     }
 
     public boolean hasImages() {
@@ -64,11 +71,15 @@ public class ReaderController {
         return false;
     }
 
-    public BufferedImage loadCurrentImage() throws IOException {
+    public BufferedImage loadCurrentImage() throws IOException, AppException {
         if (!hasImages()) return null;
         String name = imageNames.get(currentIndex);
         try (InputStream inputStream = imageSource.open(name)) {
-            return ImageIO.read(inputStream);
+            BufferedImage img = ImageIO.read(inputStream);
+            if (img == null) {
+                throw new UnsupportedFormatException(name);
+            }
+            return img;
         }
     }
 
