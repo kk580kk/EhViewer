@@ -19,6 +19,7 @@ import java.awt.FlowLayout;
 import java.awt.event.KeyEvent;
 import java.io.File;
 import java.util.List;
+import com.hippo.desktop.AppException;
 
 public class Main {
     public static void main(String[] args) {
@@ -84,6 +85,8 @@ public class Main {
                         imagePanel.showImage(null);
                         status.setText("No images");
                     }
+                } catch (AppException ex) {
+                    JOptionPane.showMessageDialog(frame, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 } catch (Exception e) {
                     JOptionPane.showMessageDialog(frame, "Failed to load image: " + e.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                 }
@@ -118,6 +121,8 @@ public class Main {
                             recentFiles.add(path);
                             refreshRecentMenu[0].run();
                             refresh.run();
+                        } catch (AppException ex) {
+                            JOptionPane.showMessageDialog(frame, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                         } catch (Exception ex) {
                             JOptionPane.showMessageDialog(frame, "Failed to open: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                         }
@@ -205,6 +210,8 @@ public class Main {
                         recentFiles.add(dir.getAbsolutePath());
                         refreshRecentMenu[0].run();
                         refresh.run();
+                    } catch (AppException ex) {
+                        JOptionPane.showMessageDialog(frame, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(frame, "Failed to open: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                     }
@@ -222,6 +229,8 @@ public class Main {
                         recentFiles.add(file.getAbsolutePath());
                         refreshRecentMenu[0].run();
                         refresh.run();
+                    } catch (AppException ex) {
+                        JOptionPane.showMessageDialog(frame, ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                     } catch (Exception ex) {
                         JOptionPane.showMessageDialog(frame, "Failed to open: " + ex.getMessage(), "Error", JOptionPane.ERROR_MESSAGE);
                     }
