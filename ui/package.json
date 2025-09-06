@@ -1,0 +1,49 @@
+{
+  "name": "ehviewer-desktop",
+  "productName": "EhViewer Desktop",
+  "private": true,
+  "version": "0.1.0",
+  "type": "module",
+  "license": "Apache-2.0",
+  "homepage": "https://example.com/ehviewer-desktop",
+  "author": {
+    "name": "Hippo Seven",
+    "email": "dev@example.com"
+  },
+  "main": "dist-electron/main/main.js",
+  "scripts": {
+    "dev": "concurrently -k \"npm:server\" \"npm:web\" \"npm:electron\"",
+    "server": "cross-env JAVA_HOME=/usr/lib/jvm/java-11-openjdk-amd64 PORT=8080 bash -lc \"cd /workspace && ./gradlew :server:run --no-daemon\"",
+    "electron": "wait-on http://localhost:8080/api/health && cross-env VITE_DEV_SERVER_URL=http://localhost:5173 electron-vite dev",
+    "web": "vite",
+    "build": "tsc -b && vite build && electron-vite build && electron-builder --linux",
+    "lint": "eslint .",
+    "preview": "vite preview"
+  },
+  "dependencies": {
+    "react": "^19.1.1",
+    "react-dom": "^19.1.1",
+    "react-router-dom": "^7.0.2"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.33.0",
+    "@types/electron": "^1.4.38",
+    "@types/node": "^24.3.1",
+    "@types/react": "^19.1.10",
+    "@types/react-dom": "^19.1.7",
+    "@vitejs/plugin-react": "^4.3.1",
+    "concurrently": "^9.1.2",
+    "cross-env": "^7.0.3",
+    "electron": "^33.2.1",
+    "electron-builder": "^25.1.8",
+    "electron-vite": "^2.3.0",
+    "eslint": "^9.33.0",
+    "eslint-plugin-react-hooks": "^5.2.0",
+    "eslint-plugin-react-refresh": "^0.4.20",
+    "globals": "^16.3.0",
+    "typescript": "~5.8.3",
+    "typescript-eslint": "^8.39.1",
+    "vite": "^5.4.10",
+    "wait-on": "^8.0.2"
+  }
+}
