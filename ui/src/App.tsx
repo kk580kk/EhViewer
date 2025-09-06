@@ -1,4 +1,5 @@
 import { useEffect, useState } from 'react'
+import { Link } from 'react-router-dom'
 import './App.css'
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
       <h1>EhViewer Desktop</h1>
       <p>Backend health: {status}</p>
       <pre style={{ background: '#111', color: '#0f0', padding: 12 }}>{message}</pre>
+      <p><Link to="/galleries">Go to Galleries</Link></p>
     </div>
   )
 }
