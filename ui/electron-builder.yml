@@ -1,0 +1,16 @@
+appId: com.hippo.ehviewer
+productName: EhViewer Desktop
+linux:
+  target:
+    - AppImage
+    - deb
+  category: Utility
+  maintainer: Hippo Seven <dev@example.com>
+  synopsis: EhViewer desktop application
+  description: A desktop port of EhViewer using Electron + React with Java back-end.
+directories:
+  output: dist-app
+files:
+  - dist/**
+  - dist-electron/**
+  - package.json

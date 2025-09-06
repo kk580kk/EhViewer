@@ -1,10 +1,19 @@
-.gradle
-/local.properties
+# Node
+ui/node_modules/
+ui/dist/
+ui/dist-electron/
+ui/dist-app/
+
+# Gradle / Java
+**/.gradle/
+**/build/
+.gradle/
+/build/
+
+# IDE
+.idea/
+.vscode/
+
+# OS
 .DS_Store
-/build
-/src
-*.iml
-.idea
-/captures
-release
-google-services.json
+Thumbs.db
