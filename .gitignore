@@ -8,3 +8,12 @@
 /captures
 release
 google-services.json
+
+# HarmonyOS
+node_modules
+oh_modules
+.ohpm
+*.hap
+*.app
+entry/build
+.hvigor

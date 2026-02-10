@@ -1,0 +1,12 @@
+{
+  "modelVersion": "5.0.0",
+  "dependencies": {
+    "implementation": [],
+    "compileOnly": []
+  },
+  "execution": {
+    "analyze": [],
+    "node": "default",
+    "product": "default"
+  }
+}

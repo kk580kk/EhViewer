@@ -1,0 +1,9 @@
+{
+  "name": "ehviewer",
+  "version": "1.7.3",
+  "private": true,
+  "scripts": {
+    "test": "node scripts/verify-harmony-structure.js",
+    "lint": "node scripts/verify-harmony-structure.js"
+  }
+}

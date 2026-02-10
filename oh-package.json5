@@ -1,0 +1,12 @@
+{
+  "name": "ehviewer",
+  "version": "1.7.3",
+  "description": "EhViewer - HarmonyOS",
+  "main": "",
+  "author": "",
+  "license": "Apache-2.0",
+  "dependencies": {},
+  "devDependencies": {
+    "@ohos/hvigor-ohos-plugin": "3.0.6"
+  }
+}
