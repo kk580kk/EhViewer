@@ -9,6 +9,11 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+import { EhException } from '../client/exception/EhException.ets';
+
+// Re-export so existing consumers keep working via this module.
+export { EhException } from '../client/exception/EhException.ets';
+
 /**
  * Localised error message strings, injected by the caller.
  */
@@ -21,16 +26,6 @@ export interface ErrorStrings {
   redirection: string;
   socket: string;
   unknown: string;
-}
-
-/**
- * Application-level exception with a user-facing message.
- */
-export class EhException extends Error {
-  constructor(message: string) {
-    super(message);
-    this.name = 'EhException';
-  }
 }
 
 /**
