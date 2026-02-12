@@ -12,6 +12,7 @@ import type {
   HttpRequest,
   HttpResponse,
 } from '../../../main/ets/network/HttpClient.ets';
+import { StatusCodeException } from '../../../main/ets/network/StatusCodeException.ets';
 
 // ---- Mock engine ----
 
@@ -152,10 +153,10 @@ describe('HttpClient', () => {
   describe('setEngine()', () => {
     it('should replace the engine at runtime', async () => {
       const engine2 = new MockEngine();
-      engine2.response = { statusCode: 404, headers: {}, body: 'not found' };
+      engine2.response = { statusCode: 200, headers: {}, body: 'ok' };
       client.setEngine(engine2);
       const res = await client.get('https://example.com');
-      assert.strictEqual(res.statusCode, 404);
+      assert.strictEqual(res.statusCode, 200);
       assert.strictEqual(engine.lastRequest, null); // original engine was not called
     });
   });
@@ -205,6 +206,121 @@ describe('HttpClient', () => {
       const h = engine.lastRequest!.headers!;
       assert.strictEqual(h['Referer'], 'https://e-hentai.org');
       assert.strictEqual(h['Origin'], 'https://e-hentai.org');
+    });
+  });
+
+  describe('status code error handling', () => {
+    it('should throw StatusCodeException for 4xx by default', async () => {
+      engine.response = { statusCode: 404, headers: {}, body: 'not found' };
+      await assert.rejects(
+        () => client.get('https://example.com/missing'),
+        (err: unknown) => {
+          assert.ok(err instanceof StatusCodeException);
+          assert.strictEqual((err as StatusCodeException).responseCode, 404);
+          assert.strictEqual((err as StatusCodeException).url, 'https://example.com/missing');
+          return true;
+        },
+      );
+    });
+
+    it('should throw StatusCodeException for 5xx by default', async () => {
+      engine.response = { statusCode: 500, headers: {}, body: 'server error' };
+      await assert.rejects(
+        () => client.get('https://example.com/api'),
+        (err: unknown) => {
+          assert.ok(err instanceof StatusCodeException);
+          assert.strictEqual((err as StatusCodeException).responseCode, 500);
+          return true;
+        },
+      );
+    });
+
+    it('should throw StatusCodeException for 400', async () => {
+      engine.response = { statusCode: 400, headers: {}, body: 'bad request' };
+      await assert.rejects(
+        () => client.postJson('https://example.com/api', '{}'),
+        (err: unknown) => {
+          assert.ok(err instanceof StatusCodeException);
+          assert.strictEqual((err as StatusCodeException).responseCode, 400);
+          return true;
+        },
+      );
+    });
+
+    it('should not throw for 2xx responses', async () => {
+      engine.response = { statusCode: 200, headers: {}, body: 'ok' };
+      const res = await client.get('https://example.com');
+      assert.strictEqual(res.statusCode, 200);
+    });
+
+    it('should not throw for 3xx responses', async () => {
+      engine.response = { statusCode: 301, headers: {}, body: '' };
+      const res = await client.get('https://example.com');
+      assert.strictEqual(res.statusCode, 301);
+    });
+
+    it('should not throw when throwOnErrorStatus is false', async () => {
+      const lenientClient = new HttpClient({ engine, throwOnErrorStatus: false });
+      engine.response = { statusCode: 404, headers: {}, body: 'not found' };
+      const res = await lenientClient.get('https://example.com/missing');
+      assert.strictEqual(res.statusCode, 404);
+      assert.strictEqual(res.body, 'not found');
+    });
+
+    it('should not throw for 500 when throwOnErrorStatus is false', async () => {
+      const lenientClient = new HttpClient({ engine, throwOnErrorStatus: false });
+      engine.response = { statusCode: 500, headers: {}, body: 'error' };
+      const res = await lenientClient.get('https://example.com/api');
+      assert.strictEqual(res.statusCode, 500);
+    });
+
+    it('should still save cookies before throwing on error status', async () => {
+      const saved: { url: string; cookies: unknown[] }[] = [];
+      const jar: import('../../../main/ets/network/CookieRepository.ets').CookieJar = {
+        loadForRequest() { return []; },
+        saveFromResponse(url: string, cookies: unknown[]) {
+          saved.push({ url, cookies });
+        },
+      };
+      client.setCookieJar(jar);
+      engine.response = {
+        statusCode: 401,
+        headers: { 'Set-Cookie': 'session=expired; Path=/' },
+        body: 'unauthorized',
+      };
+      await assert.rejects(
+        () => client.get('https://example.com/protected'),
+        (err: unknown) => err instanceof StatusCodeException,
+      );
+      // Cookies should have been saved even though error was thrown
+      assert.strictEqual(saved.length, 1);
+    });
+
+    it('should include URL in StatusCodeException', async () => {
+      engine.response = { statusCode: 403, headers: {}, body: '' };
+      await assert.rejects(
+        () => client.get('https://example.com/forbidden'),
+        (err: unknown) => {
+          assert.ok(err instanceof StatusCodeException);
+          assert.strictEqual((err as StatusCodeException).url, 'https://example.com/forbidden');
+          assert.strictEqual((err as StatusCodeException).isClientError, true);
+          assert.strictEqual((err as StatusCodeException).isServerError, false);
+          return true;
+        },
+      );
+    });
+
+    it('should identify server errors correctly', async () => {
+      engine.response = { statusCode: 502, headers: {}, body: '' };
+      await assert.rejects(
+        () => client.get('https://example.com/api'),
+        (err: unknown) => {
+          assert.ok(err instanceof StatusCodeException);
+          assert.strictEqual((err as StatusCodeException).isServerError, true);
+          assert.strictEqual((err as StatusCodeException).isClientError, false);
+          return true;
+        },
+      );
     });
   });
 

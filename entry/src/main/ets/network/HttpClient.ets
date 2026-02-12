@@ -9,6 +9,10 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
+import { formatCookieHeader, parseSetCookieHeaders } from './Cookie.ets';
+import type { CookieJar } from './CookieRepository.ets';
+import { StatusCodeException } from './StatusCodeException.ets';
+
 // ---- Constants ----
 
 const CHROME_USER_AGENT =
@@ -95,16 +99,26 @@ export class HttpClient {
   private defaultHeaders: Record<string, string>;
   private connectTimeoutMs: number;
   private readTimeoutMs: number;
+  private cookieJar: CookieJar | null;
+  private throwOnErrorStatus: boolean;
 
   constructor(options: {
     engine: HttpEngine;
     defaultHeaders?: Record<string, string>;
     connectTimeoutMs?: number;
     readTimeoutMs?: number;
+    cookieJar?: CookieJar;
+    /**
+     * When true (default), automatically throw StatusCodeException
+     * for HTTP responses with status code >= 400.
+     */
+    throwOnErrorStatus?: boolean;
   }) {
     this.engine = options.engine;
     this.connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.readTimeoutMs = options.readTimeoutMs ?? DEFAULT_TIMEOUT_MS;
+    this.cookieJar = options.cookieJar ?? null;
+    this.throwOnErrorStatus = options.throwOnErrorStatus ?? true;
     this.defaultHeaders = {
       'User-Agent': CHROME_USER_AGENT,
       'Accept': CHROME_ACCEPT,
@@ -118,15 +132,55 @@ export class HttpClient {
     this.engine = engine;
   }
 
+  /** Replace the cookie jar at runtime. */
+  setCookieJar(jar: CookieJar | null): void {
+    this.cookieJar = jar;
+  }
+
   /** Send a fully customised request. */
   async execute(request: HttpRequest): Promise<HttpResponse> {
+    const headers: Record<string, string> = {
+      ...this.defaultHeaders,
+      ...request.headers,
+    };
+
+    // Attach cookies from the jar
+    if (this.cookieJar) {
+      const cookies = this.cookieJar.loadForRequest(request.url);
+      if (cookies.length > 0) {
+        headers['Cookie'] = formatCookieHeader(cookies);
+      }
+    }
+
     const merged: HttpRequest = {
       ...request,
       connectTimeoutMs: request.connectTimeoutMs ?? this.connectTimeoutMs,
       readTimeoutMs: request.readTimeoutMs ?? this.readTimeoutMs,
-      headers: { ...this.defaultHeaders, ...request.headers },
+      headers,
     };
-    return this.engine.execute(merged);
+
+    const response = await this.engine.execute(merged);
+
+    // Save cookies from the response
+    if (this.cookieJar) {
+      const setCookie =
+        response.headers['Set-Cookie'] ??
+        response.headers['set-cookie'] ??
+        '';
+      if (setCookie.length > 0) {
+        const parsed = parseSetCookieHeaders(request.url, setCookie);
+        if (parsed.length > 0) {
+          this.cookieJar.saveFromResponse(request.url, parsed);
+        }
+      }
+    }
+
+    // Throw StatusCodeException for HTTP error responses (>= 400)
+    if (this.throwOnErrorStatus && response.statusCode >= 400) {
+      throw new StatusCodeException(response.statusCode, request.url);
+    }
+
+    return response;
   }
 
   // ---- Convenience methods ----
@@ -160,6 +214,28 @@ export class HttpClient {
       headers,
       body: { type: 'multipart', parts },
     });
+  }
+
+  async postRaw(url: string, content: string, contentType: string, headers?: Record<string, string>): Promise<HttpResponse> {
+    return this.execute({
+      url,
+      method: 'POST',
+      headers,
+      body: { type: 'raw', content, contentType },
+    });
+  }
+
+  async put(url: string, json: string, headers?: Record<string, string>): Promise<HttpResponse> {
+    return this.execute({
+      url,
+      method: 'PUT',
+      headers,
+      body: { type: 'json', content: json },
+    });
+  }
+
+  async delete(url: string, headers?: Record<string, string>): Promise<HttpResponse> {
+    return this.execute({ url, method: 'DELETE', headers });
   }
 }
 
