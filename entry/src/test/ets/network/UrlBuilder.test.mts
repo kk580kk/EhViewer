@@ -89,4 +89,51 @@ describe('UrlBuilder', () => {
       assert.strictEqual(url, 'https://api.example.com/v1?method=gdata&page=0&token=abc123');
     });
   });
+
+  describe('encoding edge cases', () => {
+    it('should encode CJK characters', () => {
+      const url = new UrlBuilder('https://e-hentai.org/')
+        .addQuery('f_search', '東方')
+        .build();
+      assert.strictEqual(url, 'https://e-hentai.org/?f_search=%E6%9D%B1%E6%96%B9');
+    });
+
+    it('should encode plus sign literally', () => {
+      const url = new UrlBuilder('https://e-hentai.org/')
+        .addQuery('f_search', 'a+b')
+        .build();
+      assert.strictEqual(url, 'https://e-hentai.org/?f_search=a%2Bb');
+    });
+
+    it('should encode slash in values', () => {
+      const url = new UrlBuilder('https://e-hentai.org/')
+        .addQuery('tag', 'artist:name/alias')
+        .build();
+      assert.strictEqual(url, 'https://e-hentai.org/?tag=artist%3Aname%2Falias');
+    });
+
+    it('should allow duplicate keys', () => {
+      const url = new UrlBuilder('https://example.com/')
+        .addQuery('tag', 'a')
+        .addQuery('tag', 'b')
+        .build();
+      assert.strictEqual(url, 'https://example.com/?tag=a&tag=b');
+    });
+  });
+
+  describe('addQueryNumber() edge cases', () => {
+    it('should handle negative numbers', () => {
+      const url = new UrlBuilder('https://example.com/')
+        .addQueryNumber('offset', -1)
+        .build();
+      assert.strictEqual(url, 'https://example.com/?offset=-1');
+    });
+
+    it('should handle floating point numbers', () => {
+      const url = new UrlBuilder('https://example.com/')
+        .addQueryNumber('rating', 4.5)
+        .build();
+      assert.strictEqual(url, 'https://example.com/?rating=4.5');
+    });
+  });
 });
