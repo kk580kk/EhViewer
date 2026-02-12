@@ -160,6 +160,42 @@ describe('HttpClient', () => {
     });
   });
 
+  describe('postRaw()', () => {
+    it('should send POST with raw body and content type', async () => {
+      await client.postRaw('https://example.com/data', '<xml/>', 'application/xml');
+      const req = engine.lastRequest!;
+      assert.strictEqual(req.method, 'POST');
+      assert.strictEqual(req.body!.type, 'raw');
+      assert.strictEqual(req.body!.content, '<xml/>');
+      assert.strictEqual(req.body!.contentType, 'application/xml');
+    });
+  });
+
+  describe('put()', () => {
+    it('should send PUT with JSON body', async () => {
+      const json = JSON.stringify({ id: 1 });
+      await client.put('https://example.com/items/1', json);
+      const req = engine.lastRequest!;
+      assert.strictEqual(req.method, 'PUT');
+      assert.strictEqual(req.body!.type, 'json');
+      assert.strictEqual(req.body!.content, json);
+    });
+  });
+
+  describe('delete()', () => {
+    it('should send DELETE request', async () => {
+      await client.delete('https://example.com/items/1');
+      const req = engine.lastRequest!;
+      assert.strictEqual(req.method, 'DELETE');
+      assert.strictEqual(req.body, undefined);
+    });
+
+    it('should pass custom headers', async () => {
+      await client.delete('https://example.com/items/1', { 'X-Token': 'abc' });
+      assert.strictEqual(engine.lastRequest!.headers!['X-Token'], 'abc');
+    });
+  });
+
   describe('execute() with headers from request', () => {
     it('should include Referer and Origin when provided', async () => {
       await client.get('https://e-hentai.org/', {
@@ -169,6 +205,48 @@ describe('HttpClient', () => {
       const h = engine.lastRequest!.headers!;
       assert.strictEqual(h['Referer'], 'https://e-hentai.org');
       assert.strictEqual(h['Origin'], 'https://e-hentai.org');
+    });
+  });
+
+  describe('cookie jar integration', () => {
+    it('should attach cookies from the jar to requests', async () => {
+      const jar: import('../../../main/ets/network/CookieRepository.ets').CookieJar = {
+        loadForRequest(_url: string) {
+          return [
+            { name: 'sid', value: 'abc123', expiresAt: Date.now() + 86400000, domain: 'example.com', path: '/', secure: false, httpOnly: false, persistent: true, hostOnly: true },
+          ];
+        },
+        saveFromResponse() {},
+      };
+      client.setCookieJar(jar);
+      await client.get('https://example.com/');
+      assert.strictEqual(engine.lastRequest!.headers!['Cookie'], 'sid=abc123');
+    });
+
+    it('should save Set-Cookie headers from response', async () => {
+      const saved: { url: string; cookies: unknown[] }[] = [];
+      const jar: import('../../../main/ets/network/CookieRepository.ets').CookieJar = {
+        loadForRequest() { return []; },
+        saveFromResponse(url: string, cookies: unknown[]) {
+          saved.push({ url, cookies });
+        },
+      };
+      client.setCookieJar(jar);
+      engine.response = {
+        statusCode: 200,
+        headers: { 'Set-Cookie': 'token=xyz; Path=/; HttpOnly' },
+        body: 'ok',
+      };
+      await client.get('https://example.com/login');
+      assert.strictEqual(saved.length, 1);
+      assert.strictEqual(saved[0].url, 'https://example.com/login');
+      assert.ok(saved[0].cookies.length > 0);
+    });
+
+    it('should not attach cookies when jar is null', async () => {
+      client.setCookieJar(null);
+      await client.get('https://example.com/');
+      assert.strictEqual(engine.lastRequest!.headers!['Cookie'], undefined);
     });
   });
 });
