@@ -3,7 +3,11 @@
   "version": "1.7.3",
   "private": true,
   "scripts": {
-    "test": "node scripts/verify-harmony-structure.js",
-    "lint": "node scripts/verify-harmony-structure.js"
+    "test": "node scripts/verify-harmony-structure.js && node --experimental-strip-types --import ./scripts/ets-loader.mjs --test \"entry/src/test/ets/**/*.test.mts\"",
+    "test:util": "node --experimental-strip-types --import ./scripts/ets-loader.mjs --test \"entry/src/test/ets/util/*.test.mts\"",
+    "lint": "node scripts/verify-harmony-structure.js",
+    "build": "node scripts/run-hvigor.js assembleHap --mode module -p product=default",
+    "build:debug": "node scripts/run-hvigor.js assembleHap --mode module -p product=default -p buildMode=debug",
+    "clean": "node scripts/run-hvigor.js clean"
   }
 }
