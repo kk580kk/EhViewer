@@ -10,6 +10,11 @@
  */
 
 /**
+ * Time unit identifiers matching Android R.plurals names.
+ */
+export type TimeUnit = 'year' | 'day' | 'hour' | 'minute' | 'second';
+
+/**
  * Provides human-readable time formatting utilities.
  *
  * Strings are configured via {@link ReadableTime.initialize} so the caller
@@ -24,6 +29,8 @@ export interface ReadableTimeStrings {
   /** Plural forms: (count) => localised string, e.g. "1 minute ago" / "5 minutes ago" */
   someMinutesAgo: (count: number) => string;
   someHoursAgo: (count: number) => string;
+  /** Localised unit name with plural support, e.g. (1, 'hour') => 'hour', (2, 'second') => 'secs' */
+  unitPlural: (unit: TimeUnit, count: number) => string;
 }
 
 export class ReadableTime {
@@ -45,7 +52,7 @@ export class ReadableTime {
     ReadableTime.SECOND_MILLIS,
   ];
 
-  private static readonly UNIT_NAMES: string[] = ['year', 'day', 'hour', 'minute', 'second'];
+  private static readonly UNIT_KEYS: TimeUnit[] = ['year', 'day', 'hour', 'minute', 'second'];
 
   private static strings: ReadableTimeStrings | null = null;
 
@@ -107,8 +114,10 @@ export class ReadableTime {
 
   /**
    * Produce a duration string, e.g. "1 year 2 days 3 hours 4 minutes 5 seconds".
+   * Requires {@link initialize} to have been called.
    */
   static getTimeInterval(time: number): string {
+    const s = ReadableTime.strings!;
     const parts: string[] = [];
     let leftover = time;
 
@@ -117,7 +126,7 @@ export class ReadableTime {
       const quotient = Math.floor(leftover / multiple);
       const remainder = leftover % multiple;
       if (parts.length > 0 || quotient !== 0 || i === ReadableTime.SIZE - 1) {
-        parts.push(`${quotient} ${ReadableTime.UNIT_NAMES[i]}${quotient !== 1 ? 's' : ''}`);
+        parts.push(`${quotient} ${s.unitPlural(ReadableTime.UNIT_KEYS[i], quotient)}`);
       }
       leftover = remainder;
     }
@@ -127,16 +136,19 @@ export class ReadableTime {
 
   /**
    * Return the single most significant time unit, e.g. "3 hours".
+   * Requires {@link initialize} to have been called.
    */
   static getShortTimeInterval(time: number): string {
+    const s = ReadableTime.strings!;
+
     for (let i = 0; i < ReadableTime.SIZE; i++) {
       const multiple = ReadableTime.MULTIPLES[i];
       const quotient = Math.floor(time / multiple);
       if (time > multiple * 1.5 || i === ReadableTime.SIZE - 1) {
-        return `${quotient} ${ReadableTime.UNIT_NAMES[i]}${quotient !== 1 ? 's' : ''}`;
+        return `${quotient} ${s.unitPlural(ReadableTime.UNIT_KEYS[i], quotient)}`;
       }
     }
-    return '0 seconds';
+    return `0 ${s.unitPlural('second', 0)}`;
   }
 
   /**

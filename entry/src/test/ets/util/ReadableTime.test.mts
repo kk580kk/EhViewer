@@ -1,8 +1,32 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { ReadableTime } from '../../../main/ets/util/ReadableTime.ets';
+import { ReadableTime, type TimeUnit } from '../../../main/ets/util/ReadableTime.ets';
+
+/** Simple English plural helper used across all test suites. */
+function englishPlural(unit: TimeUnit, count: number): string {
+  const plurals: Record<TimeUnit, [string, string]> = {
+    year: ['year', 'years'],
+    day: ['day', 'days'],
+    hour: ['hour', 'hours'],
+    minute: ['minute', 'minutes'],
+    second: ['second', 'seconds'],
+  };
+  return count === 1 ? plurals[unit][0] : plurals[unit][1];
+}
 
 describe('ReadableTime', () => {
+
+  beforeEach(() => {
+    ReadableTime.initialize({
+      fromTheFuture: 'from the future',
+      justNow: 'just now',
+      yesterday: 'yesterday',
+      someDaysAgo: '{0} days ago',
+      someMinutesAgo: (n: number) => `${n} minute${n !== 1 ? 's' : ''} ago`,
+      someHoursAgo: (n: number) => `${n} hour${n !== 1 ? 's' : ''} ago`,
+      unitPlural: englishPlural,
+    });
+  });
 
   describe('getPlainTime', () => {
     it('should format a known timestamp', () => {
@@ -64,17 +88,6 @@ describe('ReadableTime', () => {
   });
 
   describe('getTimeAgo', () => {
-    beforeEach(() => {
-      ReadableTime.initialize({
-        fromTheFuture: 'from the future',
-        justNow: 'just now',
-        yesterday: 'yesterday',
-        someDaysAgo: '{0} days ago',
-        someMinutesAgo: (n: number) => `${n} minute${n !== 1 ? 's' : ''} ago`,
-        someHoursAgo: (n: number) => `${n} hour${n !== 1 ? 's' : ''} ago`,
-      });
-    });
-
     it('should return "just now" for recent time', () => {
       const recent = Date.now() - 10_000; // 10 seconds ago
       assert.strictEqual(ReadableTime.getTimeAgo(recent), 'just now');
