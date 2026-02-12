@@ -13,6 +13,7 @@ import { FavoritesTab } from '../ui/tabs/FavoritesTab.ets';
 import { HistoryTab } from '../ui/tabs/HistoryTab.ets';
 import { DownloadsTab } from '../ui/tabs/DownloadsTab.ets';
 import { SettingsTab } from '../ui/tabs/SettingsTab.ets';
+import { GalleryItemData, HistoryItemData, DownloadItemData } from '../viewmodel/GalleryItemData.ets';
 import {
   TAB_ITEMS,
   TAB_GALLERY,
@@ -21,6 +22,12 @@ import {
   TAB_DOWNLOADS,
   TAB_SETTINGS,
 } from '../router/TabConfig.ets';
+import { FavoritesViewModel } from '../viewmodel/FavoritesViewModel.ets';
+import { HistoryViewModel } from '../viewmodel/HistoryViewModel.ets';
+import { DownloadsViewModel } from '../viewmodel/DownloadsViewModel.ets';
+import { MemoryEhDB } from '../database/MemoryEhDB.ets';
+import { DataMappers } from '../viewmodel/DataMappers.ets';
+import { PageRouter } from '../router/PageRouter.ets';
 
 /**
  * Main entry page with bottom tab navigation.
@@ -36,6 +43,52 @@ import {
 @Component
 struct Index {
   @State currentTab: number = TAB_GALLERY;
+
+  // Shared database (will be replaced by production DB when available)
+  private db = new MemoryEhDB();
+
+  // ViewModels
+  private favVM = new FavoritesViewModel(this.db);
+  private historyVM = new HistoryViewModel(this.db);
+  private downloadsVM = new DownloadsViewModel(this.db);
+
+  // UI data arrays
+  @State favItems: GalleryItemData[] = [];
+  @State favEmpty: boolean = true;
+  @State historyItems: HistoryItemData[] = [];
+  @State historyEmpty: boolean = true;
+  @State downloadItems: DownloadItemData[] = [];
+  @State downloadEmpty: boolean = true;
+  @State downloadLabelNames: string[] = ['All Downloads'];
+
+  aboutToAppear(): void {
+    this.loadFavorites();
+    this.loadHistory();
+    this.loadDownloads();
+  }
+
+  private loadFavorites(): void {
+    this.favVM.load();
+    this.favItems = DataMappers.toGalleryItems(this.favVM.items);
+    this.favEmpty = this.favVM.isEmpty;
+  }
+
+  private loadHistory(): void {
+    this.historyVM.load();
+    this.historyItems = DataMappers.toHistoryItems(this.historyVM.items);
+    this.historyEmpty = this.historyVM.isEmpty;
+  }
+
+  private loadDownloads(): void {
+    this.downloadsVM.load();
+    this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
+    this.downloadEmpty = this.downloadsVM.isEmpty;
+    this.downloadLabelNames = this.downloadsVM.labelNames;
+  }
+
+  private navigateToDetail(gid: number, token: string): void {
+    PageRouter.toGalleryDetail(gid, token);
+  }
 
   @Builder
   tabBuilder(index: number) {
@@ -64,17 +117,77 @@ struct Index {
         .tabBar(this.tabBuilder(TAB_GALLERY))
 
         TabContent() {
-          FavoritesTab()
+          FavoritesTab({
+            items: this.favItems,
+            isEmpty: this.favEmpty,
+            onItemClick: (gid: number, token: string) => {
+              this.navigateToDetail(gid, token);
+            },
+            onRemove: (gid: number) => {
+              this.favVM.removeFavorite(gid);
+              this.favItems = DataMappers.toGalleryItems(this.favVM.items);
+              this.favEmpty = this.favVM.isEmpty;
+            },
+            onSearch: (keyword: string) => {
+              this.favVM.search(keyword);
+              this.favItems = DataMappers.toGalleryItems(this.favVM.items);
+              this.favEmpty = this.favVM.isEmpty;
+            },
+            onClearSearch: () => {
+              this.favVM.clearSearch();
+              this.favItems = DataMappers.toGalleryItems(this.favVM.items);
+              this.favEmpty = this.favVM.isEmpty;
+            },
+          })
         }
         .tabBar(this.tabBuilder(TAB_FAVORITES))
 
         TabContent() {
-          HistoryTab()
+          HistoryTab({
+            items: this.historyItems,
+            isEmpty: this.historyEmpty,
+            onItemClick: (gid: number, token: string) => {
+              this.navigateToDetail(gid, token);
+            },
+            onDelete: (index: number) => {
+              this.historyVM.deleteAt(index);
+              this.historyItems = DataMappers.toHistoryItems(this.historyVM.items);
+              this.historyEmpty = this.historyVM.isEmpty;
+            },
+            onClearAll: () => {
+              this.historyVM.clearAll();
+              this.historyItems = DataMappers.toHistoryItems(this.historyVM.items);
+              this.historyEmpty = this.historyVM.isEmpty;
+            },
+          })
         }
         .tabBar(this.tabBuilder(TAB_HISTORY))
 
         TabContent() {
-          DownloadsTab()
+          DownloadsTab({
+            items: this.downloadItems,
+            isEmpty: this.downloadEmpty,
+            labelNames: this.downloadLabelNames,
+            onItemClick: (gid: number, token: string) => {
+              this.navigateToDetail(gid, token);
+            },
+            onRemove: (gid: number) => {
+              this.downloadsVM.removeDownload(gid);
+              this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
+              this.downloadEmpty = this.downloadsVM.isEmpty;
+            },
+            onStart: (_gid: number) => {
+              // TODO: integrate with actual DownloadManager when available
+            },
+            onStop: (_gid: number) => {
+              // TODO: integrate with actual DownloadManager when available
+            },
+            onLabelChange: (label: string | null) => {
+              this.downloadsVM.setLabel(label === 'All Downloads' ? null : label);
+              this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
+              this.downloadEmpty = this.downloadsVM.isEmpty;
+            },
+          })
         }
         .tabBar(this.tabBuilder(TAB_DOWNLOADS))
 
@@ -87,6 +200,14 @@ struct Index {
       .barMode(BarMode.Fixed)
       .onChange((index: number) => {
         this.currentTab = index;
+        // Reload data when switching to a tab
+        if (index === TAB_FAVORITES) {
+          this.loadFavorites();
+        } else if (index === TAB_HISTORY) {
+          this.loadHistory();
+        } else if (index === TAB_DOWNLOADS) {
+          this.loadDownloads();
+        }
       })
       .width('100%')
       .height('100%')
