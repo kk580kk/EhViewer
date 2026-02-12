@@ -84,6 +84,39 @@ export class SettingsService {
     SettingsService.downloadLocation = path;
   }
 
+  // ---- Account & Sign-In ----
+
+  /** Whether the app should prompt for sign-in on first launch. */
+  private static needSignIn: boolean = true;
+  /** Display name obtained from profile after sign-in. */
+  private static displayName: string = '';
+  /** Avatar URL obtained from profile after sign-in. */
+  private static avatar: string = '';
+
+  static getNeedSignIn(): boolean {
+    return SettingsService.needSignIn;
+  }
+
+  static putNeedSignIn(value: boolean): void {
+    SettingsService.needSignIn = value;
+  }
+
+  static getDisplayName(): string {
+    return SettingsService.displayName;
+  }
+
+  static putDisplayName(value: string): void {
+    SettingsService.displayName = value;
+  }
+
+  static getAvatar(): string {
+    return SettingsService.avatar;
+  }
+
+  static putAvatar(value: string): void {
+    SettingsService.avatar = value;
+  }
+
   // ---- Security & Privacy ----
 
   /** Lock pattern string. Empty string means no lock is set. */
@@ -115,5 +148,26 @@ export class SettingsService {
 
   static putEnabledSecurity(value: boolean): void {
     SettingsService.enabledSecurity = value;
+  }
+
+  /**
+   * Reset all settings to their defaults.
+   * Intended for testing only.
+   */
+  static resetDefaults(): void {
+    SettingsService.gallerySite = SITE_E;
+    SettingsService.showJpnTitle = false;
+    SettingsService.thumbResolution = 0;
+    SettingsService.multiThreadDownload = 3;
+    SettingsService.preloadImage = 5;
+    SettingsService.downloadOriginImage = false;
+    SettingsService.readCacheSize = 160;
+    SettingsService.downloadLocation = null;
+    SettingsService.needSignIn = true;
+    SettingsService.displayName = '';
+    SettingsService.avatar = '';
+    SettingsService.security = '';
+    SettingsService.enableFingerprint = false;
+    SettingsService.enabledSecurity = false;
   }
 }
