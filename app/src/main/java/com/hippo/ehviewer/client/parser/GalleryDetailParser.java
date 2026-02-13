@@ -195,7 +195,6 @@ public class GalleryDetailParser {
             gd.posted = "";
             gd.parent = "";
             gd.visible = "";
-            gd.visible = "";
             gd.size = "";
             gd.pages = 0;
             gd.favoriteCount = 0;
@@ -443,7 +442,7 @@ public class GalleryDetailParser {
             // time
             Element c3 = JsoupUtils.getElementByClass(element, "c3");
             String temp = c3.ownText();
-            temp = temp.substring("Posted on ".length(), temp.length() - " by:".length());
+            temp = StringUtils.trim(temp.substring("Posted on ".length(), temp.length() - " by:".length()));
             comment.time = WEB_COMMENT_DATE_FORMAT.parse(temp).getTime();
             // user
             comment.user = c3.child(0).text();
@@ -472,6 +471,9 @@ public class GalleryDetailParser {
     public static GalleryCommentList parseComments(Document document) {
         try {
             Element cdiv = document.getElementById("cdiv");
+            if (cdiv == null) {
+                return EMPTY_GALLERY_COMMENT_ARRAY;
+            }
             Elements c1s = cdiv.getElementsByClass("c1");
 
             List<GalleryComment> list = new ArrayList<>(c1s.size());
@@ -484,17 +486,19 @@ public class GalleryDetailParser {
 
             Element chd = cdiv.getElementById("chd");
             MutableBoolean hasMore = new MutableBoolean(false);
-            NodeTraversor.traverse(new NodeVisitor() {
-                @Override
-                public void head(Node node, int depth) {
-                    if (node instanceof Element && ((Element) node).text().equals("click to show all")) {
-                        hasMore.value = true;
+            if (chd != null) {
+                NodeTraversor.traverse(new NodeVisitor() {
+                    @Override
+                    public void head(Node node, int depth) {
+                        if (node instanceof Element && ((Element) node).text().equals("click to show all")) {
+                            hasMore.value = true;
+                        }
                     }
-                }
 
-                @Override
-                public void tail(Node node, int depth) { }
-            }, chd);
+                    @Override
+                    public void tail(Node node, int depth) { }
+                }, chd);
+            }
 
             return new GalleryCommentList(list.toArray(new GalleryComment[list.size()]), hasMore.value);
         } catch (Throwable e) {
