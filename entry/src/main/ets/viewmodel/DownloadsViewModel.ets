@@ -14,6 +14,7 @@ import type { EhDB } from '../database/EhDB.ets';
 import type { DownloadManager } from '../download/DownloadManager.ets';
 import { GalleryInfo } from '../model/GalleryInfo.ets';
 import { EhUtils } from '../client/EhUtils.ets';
+import { getGalleryDownloadDir } from '../download/DownloadPathResolver.ets';
 
 /** Loading states for the downloads tab. */
 export const DownloadsState = {
@@ -295,6 +296,16 @@ export class DownloadsViewModel {
   /** Get category text for a gallery info. */
   getCategoryText(gi: DownloadInfo): string {
     return EhUtils.getCategoryString(gi.category);
+  }
+
+  /**
+   * Resolve the download directory for a gallery by gid.
+   * Returns null if the download is not found or has no download root.
+   */
+  getDownloadDir(gid: number): string | null {
+    const info = this._allItems.find((item: DownloadInfo) => item.gid === gid);
+    if (info === undefined) return null;
+    return getGalleryDownloadDir(info, this.db);
   }
 
   // ---- Private helpers ----

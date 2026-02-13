@@ -59,7 +59,7 @@ export class DataMappers {
   }
 
   /** Map a DownloadInfo to a DownloadItemData for list display. */
-  static toDownloadItem(di: DownloadInfo): DownloadItemData {
+  static toDownloadItem(di: DownloadInfo, downloadDir?: string | null): DownloadItemData {
     const item = new DownloadItemData();
     item.gid = di.gid;
     item.token = di.token;
@@ -80,6 +80,8 @@ export class DataMappers {
     item.label = di.label;
     item.canStart = DownloadsViewModel.canStart(di);
     item.canStop = DownloadsViewModel.canStop(di);
+    item.isFinished = di.state === DownloadInfo.STATE_FINISH;
+    item.downloadDir = downloadDir ?? null;
     return item;
   }
 
@@ -93,8 +95,13 @@ export class DataMappers {
     return list.map((hi: HistoryInfo) => DataMappers.toHistoryItem(hi));
   }
 
-  /** Batch-map DownloadInfo array. */
-  static toDownloadItems(list: DownloadInfo[]): DownloadItemData[] {
-    return list.map((di: DownloadInfo) => DataMappers.toDownloadItem(di));
+  /** Batch-map DownloadInfo array. Optional dir resolver provides download dir per gid. */
+  static toDownloadItems(
+    list: DownloadInfo[],
+    dirResolver?: (gid: number) => string | null,
+  ): DownloadItemData[] {
+    return list.map((di: DownloadInfo) =>
+      DataMappers.toDownloadItem(di, dirResolver ? dirResolver(di.gid) : null),
+    );
   }
 }

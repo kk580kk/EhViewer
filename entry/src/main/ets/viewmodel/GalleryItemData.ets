@@ -50,4 +50,8 @@ export class DownloadItemData extends GalleryItemData {
   canStop: boolean = false;
   canPause: boolean = false;
   canResume: boolean = false;
+  /** Resolved download directory path for local reading. Null if not available. */
+  downloadDir: string | null = null;
+  /** Whether this download is finished and can be read locally. */
+  isFinished: boolean = false;
 }

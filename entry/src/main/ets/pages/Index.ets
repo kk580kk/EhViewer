@@ -163,7 +163,10 @@ struct Index {
 
   private loadDownloads(): void {
     this.downloadsVM.load();
-    this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
+    this.downloadItems = DataMappers.toDownloadItems(
+      this.downloadsVM.items,
+      (gid: number) => this.downloadsVM.getDownloadDir(gid),
+    );
     this.downloadEmpty = this.downloadsVM.isEmpty;
     this.downloadLabelNames = this.downloadsVM.labelNames;
   }
@@ -277,11 +280,23 @@ struct Index {
             isEmpty: this.downloadEmpty,
             labelNames: this.downloadLabelNames,
             onItemClick: (gid: number, token: string) => {
-              this.navigateToDetail(gid, token);
+              // Find the download item to check if it's finished
+              const item = this.downloadItems.find(
+                (d: DownloadItemData) => d.gid === gid,
+              );
+              if (item !== undefined && item.isFinished && item.downloadDir !== null) {
+                // Open as local gallery
+                PageRouter.toLocalGalleryReader('dir', item.downloadDir, 0, item.title);
+              } else {
+                this.navigateToDetail(gid, token);
+              }
             },
             onRemove: (gid: number) => {
               this.downloadsVM.removeDownload(gid);
-              this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
+              this.downloadItems = DataMappers.toDownloadItems(
+                this.downloadsVM.items,
+                (g: number) => this.downloadsVM.getDownloadDir(g),
+              );
               this.downloadEmpty = this.downloadsVM.isEmpty;
             },
             onStart: (_gid: number) => {
@@ -292,7 +307,10 @@ struct Index {
             },
             onLabelChange: (label: string | null) => {
               this.downloadsVM.setLabel(label === 'All Downloads' ? null : label);
-              this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
+              this.downloadItems = DataMappers.toDownloadItems(
+                this.downloadsVM.items,
+                (g: number) => this.downloadsVM.getDownloadDir(g),
+              );
               this.downloadEmpty = this.downloadsVM.isEmpty;
             },
             onRefresh: () => {
