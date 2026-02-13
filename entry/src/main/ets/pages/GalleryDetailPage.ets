@@ -207,27 +207,64 @@ struct GalleryDetailPage {
 
   @Builder
   ActionsSection() {
-    Row() {
-      Text('Download')
-        .fontSize(15)
-        .fontColor('#333333')
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
-      Divider()
-        .vertical(true)
-        .height(24)
-        .color('#E0E0E0')
-      Text('Read')
-        .fontSize(15)
-        .fontColor('#1976D2')
-        .layoutWeight(1)
-        .textAlign(TextAlign.Center)
+    Column() {
+      Row() {
+        Text(this.vm.downloadButtonText)
+          .fontSize(15)
+          .fontColor(this.getDownloadButtonColor())
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+          .onClick(() => {
+            if (this.vm.isDownloading) {
+              this.vm.stopDownload();
+            } else {
+              this.vm.startDownload();
+            }
+          })
+        Divider()
+          .vertical(true)
+          .height(24)
+          .color('#E0E0E0')
+        Text('Read')
+          .fontSize(15)
+          .fontColor('#1976D2')
+          .layoutWeight(1)
+          .textAlign(TextAlign.Center)
+      }
+      .width('100%')
+      .height(48)
+      .backgroundColor('#F5F5F5')
+      .borderRadius(8)
+
+      // Progress bar for active downloads
+      if (this.vm.isDownloading && this.vm.downloadProgressPercent >= 0) {
+        Progress({ value: this.vm.downloadProgressPercent, total: 100, type: ProgressType.Linear })
+          .width('100%')
+          .height(4)
+          .margin({ top: 4 })
+          .color('#4169E1')
+          .backgroundColor('#E0E0E0')
+      }
+
+      // Speed/status text for active downloads
+      if (this.vm.isDownloading && this.vm.downloadStatusText.length > 0) {
+        Text(this.vm.downloadSpeedText ?? this.vm.downloadStatusText)
+          .fontSize(12)
+          .fontColor('#666666')
+          .margin({ top: 4 })
+          .textAlign(TextAlign.Center)
+          .width('100%')
+      }
     }
     .width('100%')
-    .height(48)
-    .backgroundColor('#F5F5F5')
-    .borderRadius(8)
-    .margin({ left: 16, right: 16, top: 8, bottom: 8 })
+    .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+  }
+
+  private getDownloadButtonColor(): string {
+    if (this.vm.isDownloaded) return '#4CAF50';
+    if (this.vm.isDownloading) return '#FF9800';
+    if (this.vm.downloadState === 4) return '#F44336'; // FAILED
+    return '#333333';
   }
 
   @Builder
