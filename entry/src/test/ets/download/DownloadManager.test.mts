@@ -6,6 +6,8 @@ import { MemoryDownloadDB } from '../../../main/ets/download/MemoryDownloadDB.et
 import { DownloadInfo } from '../../../main/ets/download/DownloadInfo.ets';
 import { DownloadLabel } from '../../../main/ets/download/DownloadLabel.ets';
 import { GalleryInfo } from '../../../main/ets/model/GalleryInfo.ets';
+import { SettingsService } from '../../../main/ets/service/SettingsService.ets';
+import { MemoryPreferencesStore } from '../../../main/ets/preferences/MemoryPreferencesStore.ets';
 
 function makeGallery(gid: number, title: string = `Gallery ${gid}`): GalleryInfo {
   const gi = new GalleryInfo();
@@ -67,6 +69,7 @@ describe('DownloadManager', () => {
   let mgr: DownloadManager;
 
   beforeEach(() => {
+    SettingsService.initialize(new MemoryPreferencesStore());
     db = new MemoryDownloadDB();
     mgr = new DownloadManager(db);
   });
@@ -629,6 +632,86 @@ describe('DownloadManager', () => {
       mgr.onStartDownload = (info) => started.push(info.gid);
       mgr.startDownload(makeGallery(1));
       assert.deepStrictEqual(started, [1]);
+    });
+  });
+
+  // =========================================================================
+  // Concurrent download limit
+  // =========================================================================
+
+  describe('concurrent download limit', () => {
+    it('should download multiple galleries simultaneously when limit > 1', () => {
+      SettingsService.setConcurrentDownloadLimit(3);
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      mgr.startDownload(makeGallery(3));
+
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(3), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getCurrentTasks().length, 3);
+    });
+
+    it('should queue excess downloads when over the limit', () => {
+      SettingsService.setConcurrentDownloadLimit(2);
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      mgr.startDownload(makeGallery(3));
+
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(3), DownloadInfo.STATE_WAIT);
+      assert.strictEqual(mgr.getCurrentTasks().length, 2);
+    });
+
+    it('should start next task when one finishes with concurrent limit', () => {
+      SettingsService.setConcurrentDownloadLimit(2);
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      mgr.startDownload(makeGallery(3));
+
+      // Finish task 1
+      mgr.onDownloadFinished(10, 10, 10, 1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_FINISH);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(3), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should stop all active tasks with stopAllDownload', () => {
+      SettingsService.setConcurrentDownloadLimit(3);
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      mgr.startDownload(makeGallery(3));
+
+      mgr.stopAllDownload();
+      assert.strictEqual(mgr.getCurrentTasks().length, 0);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_NONE);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_NONE);
+      assert.strictEqual(mgr.getDownloadState(3), DownloadInfo.STATE_NONE);
+    });
+
+    it('should stop a specific active task', () => {
+      SettingsService.setConcurrentDownloadLimit(3);
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      mgr.startDownload(makeGallery(3));
+      mgr.startDownload(makeGallery(4));
+
+      mgr.stopDownload(2);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_NONE);
+      // Task 4 should be promoted
+      assert.strictEqual(mgr.getDownloadState(4), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getCurrentTasks().length, 3);
+    });
+
+    it('should respect limit of 1 (original behavior)', () => {
+      SettingsService.setConcurrentDownloadLimit(1);
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_WAIT);
+      assert.strictEqual(mgr.getCurrentTasks().length, 1);
     });
   });
 

@@ -10,6 +10,7 @@
  */
 
 import { GalleryInfo } from '../model/GalleryInfo.ets';
+import { SettingsService } from '../service/SettingsService.ets';
 import type { DownloadDB } from './DownloadDB.ets';
 import { DownloadInfo } from './DownloadInfo.ets';
 import { DownloadLabel } from './DownloadLabel.ets';
@@ -75,8 +76,8 @@ export class DownloadManager {
   /** Items waiting to be downloaded, FIFO order. */
   private readonly waitList: DownloadInfo[] = [];
 
-  /** The single task currently being downloaded (null if idle). */
-  private currentTask: DownloadInfo | null = null;
+  /** Active download tasks (supports concurrent downloads). */
+  private readonly currentTasks: DownloadInfo[] = [];
 
   private downloadListener: DownloadListener | null = null;
   private readonly downloadInfoListeners: DownloadInfoListener[] = [];
@@ -169,7 +170,7 @@ export class DownloadManager {
   }
 
   isIdle(): boolean {
-    return this.currentTask === null && this.waitList.length === 0;
+    return this.currentTasks.length === 0 && this.waitList.length === 0;
   }
 
   /**
@@ -209,7 +210,11 @@ export class DownloadManager {
   }
 
   getCurrentTask(): DownloadInfo | null {
-    return this.currentTask;
+    return this.currentTasks.length > 0 ? this.currentTasks[0] : null;
+  }
+
+  getCurrentTasks(): DownloadInfo[] {
+    return this.currentTasks;
   }
 
   getWaitList(): DownloadInfo[] {
@@ -262,45 +267,42 @@ export class DownloadManager {
   // ---------------------------------------------------------------------------
 
   /**
-   * Pick the next task from the wait list and transition it to STATE_DOWNLOAD.
-   * Only one download runs at a time.
+   * Pick tasks from the wait list and transition them to STATE_DOWNLOAD.
+   * Supports concurrent downloads up to the configured limit.
    */
   private ensureDownload(): void {
-    if (this.currentTask !== null) {
-      return; // already downloading
-    }
-    if (this.waitList.length === 0) {
-      return; // nothing queued
-    }
+    const limit = SettingsService.getConcurrentDownloadLimit();
 
-    const info = this.waitList.shift()!;
-    this.currentTask = info;
+    while (this.currentTasks.length < limit && this.waitList.length > 0) {
+      const info = this.waitList.shift()!;
+      this.currentTasks.push(info);
 
-    info.state = DownloadInfo.STATE_DOWNLOAD;
-    info.speed = -1;
-    info.remaining = -1;
-    info.total = -1;
-    info.finished = 0;
-    info.downloaded = 0;
-    info.legacy = -1;
+      info.state = DownloadInfo.STATE_DOWNLOAD;
+      info.speed = -1;
+      info.remaining = -1;
+      info.total = -1;
+      info.finished = 0;
+      info.downloaded = 0;
+      info.legacy = -1;
 
-    this.db.putDownloadInfo(info);
+      this.db.putDownloadInfo(info);
 
-    if (this.downloadListener !== null) {
-      this.downloadListener.onStart(info);
-    }
-
-    const list = this.getInfoListForLabel(info.label);
-    if (list !== null) {
-      for (const l of this.downloadInfoListeners) {
-        l.onUpdate(info, list);
+      if (this.downloadListener !== null) {
+        this.downloadListener.onStart(info);
       }
-    }
 
-    this.notifyProgressCallbacks(info, true);
+      const list = this.getInfoListForLabel(info.label);
+      if (list !== null) {
+        for (const l of this.downloadInfoListeners) {
+          l.onUpdate(info, list);
+        }
+      }
 
-    if (this.onStartDownload !== null) {
-      this.onStartDownload(info);
+      this.notifyProgressCallbacks(info, true);
+
+      if (this.onStartDownload !== null) {
+        this.onStartDownload(info);
+      }
     }
   }
 
@@ -309,8 +311,8 @@ export class DownloadManager {
    * If the gallery is already tracked and not in WAIT state, re-queue it.
    */
   startDownload(galleryInfo: GalleryInfo, label: string | null = null): void {
-    // Already the current task
-    if (this.currentTask !== null && this.currentTask.gid === galleryInfo.gid) {
+    // Already an active task
+    if (this.currentTasks.some(t => t.gid === galleryInfo.gid)) {
       return;
     }
 
@@ -392,7 +394,7 @@ export class DownloadManager {
     if (info === undefined) return false;
 
     // Already active
-    if (this.currentTask !== null && this.currentTask.gid === gid) return false;
+    if (this.currentTasks.some(t => t.gid === gid)) return false;
     if (info.state === DownloadInfo.STATE_WAIT) return false;
 
     // Only retry NONE, FAILED, or FINISH
@@ -477,7 +479,11 @@ export class DownloadManager {
     }
     this.waitList.length = 0;
 
-    this.stopCurrentDownloadInternal();
+    // Stop all active tasks
+    const activeCopy = [...this.currentTasks];
+    for (const info of activeCopy) {
+      this.stopActiveDownloadInternal(info.gid);
+    }
 
     for (const l of this.downloadInfoListeners) {
       l.onUpdateAll();
@@ -485,8 +491,9 @@ export class DownloadManager {
   }
 
   private stopDownloadInternal(gid: number): DownloadInfo | null {
-    if (this.currentTask !== null && this.currentTask.gid === gid) {
-      return this.stopCurrentDownloadInternal();
+    const activeIdx = this.currentTasks.findIndex(t => t.gid === gid);
+    if (activeIdx >= 0) {
+      return this.stopActiveDownloadInternal(gid);
     }
     const idx = this.waitList.findIndex(info => info.gid === gid);
     if (idx >= 0) {
@@ -499,12 +506,13 @@ export class DownloadManager {
     return null;
   }
 
-  private stopCurrentDownloadInternal(): DownloadInfo | null {
-    const info = this.currentTask;
-    this.currentTask = null;
-    if (info === null) {
-      return null;
-    }
+  private stopActiveDownloadInternal(gid: number): DownloadInfo | null {
+    const idx = this.currentTasks.findIndex(t => t.gid === gid);
+    if (idx < 0) return null;
+
+    const info = this.currentTasks[idx];
+    this.currentTasks.splice(idx, 1);
+
     info.state = DownloadInfo.STATE_NONE;
     this.db.putDownloadInfo(info);
     if (this.downloadListener !== null) {
@@ -514,11 +522,20 @@ export class DownloadManager {
     return info;
   }
 
+  private stopCurrentDownloadInternal(): DownloadInfo | null {
+    if (this.currentTasks.length === 0) return null;
+    return this.stopActiveDownloadInternal(this.currentTasks[0].gid);
+  }
+
   private stopRangeDownloadInternal(gidList: number[]): void {
     const gidSet = new Set(gidList);
-    if (this.currentTask !== null && gidSet.has(this.currentTask.gid)) {
-      this.stopCurrentDownloadInternal();
+    // Stop active tasks
+    for (let i = this.currentTasks.length - 1; i >= 0; i--) {
+      if (gidSet.has(this.currentTasks[i].gid)) {
+        this.stopActiveDownloadInternal(this.currentTasks[i].gid);
+      }
     }
+    // Stop waiting tasks
     for (let i = this.waitList.length - 1; i >= 0; i--) {
       const info = this.waitList[i];
       if (gidSet.has(info.gid)) {
@@ -651,14 +668,25 @@ export class DownloadManager {
   // ---------------------------------------------------------------------------
 
   /**
-   * Signal that the current download has finished.
+   * Signal that a download has finished.
+   * When called without gid (legacy), finishes the first active task.
    * @param finished pages finished successfully
    * @param downloaded pages attempted
    * @param total total pages
+   * @param gid optional gallery id to identify which task finished
    */
-  onDownloadFinished(finished: number, downloaded: number, total: number): void {
-    const info = this.currentTask;
-    this.currentTask = null;
+  onDownloadFinished(finished: number, downloaded: number, total: number, gid?: number): void {
+    let info: DownloadInfo | null = null;
+    if (gid !== undefined) {
+      const idx = this.currentTasks.findIndex(t => t.gid === gid);
+      if (idx >= 0) {
+        info = this.currentTasks[idx];
+        this.currentTasks.splice(idx, 1);
+      }
+    } else {
+      // Legacy: finish first active task
+      info = this.currentTasks.length > 0 ? this.currentTasks.shift()! : null;
+    }
 
     if (info === null) return;
 
@@ -692,11 +720,17 @@ export class DownloadManager {
   }
 
   /**
-   * Signal a progress update for the current download (speed, page count, etc.).
+   * Signal a progress update for a download (speed, page count, etc.).
    * Called periodically by the download engine.
+   * @param gid optional gallery id; if omitted, updates first active task
    */
-  onDownloadProgress(finished: number, downloaded: number, total: number, speed: number, remaining: number): void {
-    const info = this.currentTask;
+  onDownloadProgress(finished: number, downloaded: number, total: number, speed: number, remaining: number, gid?: number): void {
+    let info: DownloadInfo | null = null;
+    if (gid !== undefined) {
+      info = this.currentTasks.find(t => t.gid === gid) ?? null;
+    } else {
+      info = this.currentTasks.length > 0 ? this.currentTasks[0] : null;
+    }
     if (info === null) return;
 
     info.finished = finished;

@@ -1,0 +1,85 @@
+/*
+ * Copyright 2024 EhViewer Contributors
+ *
+ * Licensed under the Apache License, Version 2.0 (the "License");
+ * you may not use this file except in compliance with the License.
+ * You may obtain a copy of the License at
+ *
+ *     http://www.apache.org/licenses/LICENSE-2.0
+ *
+ * Unless required by applicable law or agreed to in writing, software
+ * distributed under the License is distributed on an "AS IS" BASIS,
+ * WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+ * See the License for the specific language governing permissions and
+ * limitations under the License.
+ */
+
+package com.hippo.ehviewer.download;
+
+import static org.junit.Assert.assertEquals;
+
+import com.hippo.ehviewer.Settings;
+
+import org.junit.Before;
+import org.junit.Test;
+import org.junit.runner.RunWith;
+import org.robolectric.RobolectricTestRunner;
+import org.robolectric.RuntimeEnvironment;
+import org.robolectric.annotation.Config;
+
+@Config(manifest = Config.NONE)
+@RunWith(RobolectricTestRunner.class)
+public class DownloadManagerConcurrencyTest {
+
+    @Before
+    public void setUp() {
+        Settings.initialize(RuntimeEnvironment.application);
+    }
+
+    @Test
+    public void testConcurrentDownloadLimitDefault() {
+        assertEquals(1, Settings.getConcurrentDownloadLimit());
+    }
+
+    @Test
+    public void testPutAndGetConcurrentDownloadLimit() {
+        Settings.putConcurrentDownloadLimit(3);
+        assertEquals(3, Settings.getConcurrentDownloadLimit());
+
+        Settings.putConcurrentDownloadLimit(5);
+        assertEquals(5, Settings.getConcurrentDownloadLimit());
+    }
+
+    @Test
+    public void testConcurrentDownloadLimitClampedToMin() {
+        Settings.putConcurrentDownloadLimit(0);
+        assertEquals(1, Settings.getConcurrentDownloadLimit());
+
+        Settings.putConcurrentDownloadLimit(-1);
+        assertEquals(1, Settings.getConcurrentDownloadLimit());
+    }
+
+    @Test
+    public void testConcurrentDownloadLimitClampedToMax() {
+        Settings.putConcurrentDownloadLimit(10);
+        assertEquals(5, Settings.getConcurrentDownloadLimit());
+
+        Settings.putConcurrentDownloadLimit(100);
+        assertEquals(5, Settings.getConcurrentDownloadLimit());
+    }
+
+    @Test
+    public void testConcurrentDownloadLimitBoundaryValues() {
+        Settings.putConcurrentDownloadLimit(1);
+        assertEquals(1, Settings.getConcurrentDownloadLimit());
+
+        Settings.putConcurrentDownloadLimit(5);
+        assertEquals(5, Settings.getConcurrentDownloadLimit());
+
+        Settings.putConcurrentDownloadLimit(2);
+        assertEquals(2, Settings.getConcurrentDownloadLimit());
+
+        Settings.putConcurrentDownloadLimit(4);
+        assertEquals(4, Settings.getConcurrentDownloadLimit());
+    }
+}

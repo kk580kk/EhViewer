@@ -512,6 +512,8 @@
     <string name="settings_download_pick_dir_l">Lollipop 提供了新的写入外置 SD 卡的 API。如果您想把下载路径设置到外置 SD 卡上，点击“文档”按钮</string>
     <string name="settings_download_document">文档</string>
     <string name="settings_download_continue">继续</string>
+    <string name="settings_download_concurrent_limit">同时下载数量</string>
+    <string name="settings_download_concurrent_limit_summary">最多同时下载 %s 个画廊</string>
     <string name="settings_download_multi_thread_download">下载线程数</string>
     <string name="settings_download_multi_thread_download_summary">最多同时下载 %s 张图片</string>
     <string name="settings_download_preload_image">预载图片</string>

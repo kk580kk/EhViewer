@@ -31,6 +31,14 @@
         android:defaultValue="false"/>
 
     <com.hippo.preference.ListPreference
+        android:key="concurrent_download_limit"
+        android:title="@string/settings_download_concurrent_limit"
+        android:summary="@string/settings_download_concurrent_limit_summary"
+        app:entries="@array/concurrent_download_limit_entries"
+        app:entryValues="@array/concurrent_download_limit_entry_values"
+        android:defaultValue="1"/>
+
+    <com.hippo.preference.ListPreference
         android:key="download_thread"
         android:title="@string/settings_download_multi_thread_download"
         android:summary="@string/settings_download_multi_thread_download_summary"

@@ -676,6 +676,17 @@ public class Settings {
         putIntToStr(KEY_MULTI_THREAD_DOWNLOAD, value);
     }
 
+    private static final String KEY_CONCURRENT_DOWNLOAD_LIMIT = "concurrent_download_limit";
+    private static final int DEFAULT_CONCURRENT_DOWNLOAD_LIMIT = 1;
+
+    public static int getConcurrentDownloadLimit() {
+        return MathUtils.clamp(getIntFromStr(KEY_CONCURRENT_DOWNLOAD_LIMIT, DEFAULT_CONCURRENT_DOWNLOAD_LIMIT), 1, 5);
+    }
+
+    public static void putConcurrentDownloadLimit(int value) {
+        putIntToStr(KEY_CONCURRENT_DOWNLOAD_LIMIT, value);
+    }
+
     private static final String KEY_PRELOAD_IMAGE = "preload_image";
     private static final int DEFAULT_PRELOAD_IMAGE = 5;
 
