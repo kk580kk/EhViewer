@@ -17,10 +17,15 @@
 package com.hippo.ehviewer.client;
 
 import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertNotNull;
 import static org.junit.Assert.assertNull;
 
+import java.io.ByteArrayOutputStream;
 import java.io.IOException;
+import java.nio.charset.StandardCharsets;
+import java.util.Base64;
 import java.io.InputStream;
+import okio.Buffer;
 import okio.BufferedSource;
 import okio.Okio;
 import org.junit.Test;
@@ -35,7 +40,7 @@ public class EhTagDatabaseTest {
   @Test
   public void readTheList() throws IOException {
     InputStream resource = EhTagDatabaseTest.class.getResourceAsStream("EhTagDatabaseTest");
-
+    assertNotNull("Missing test resource EhTagDatabaseTest", resource);
     EhTagDatabase db;
     try (BufferedSource source = Okio.buffer(Okio.source(resource))) {
       db = new EhTagDatabase("EhTagDatabaseTest", source);
@@ -50,5 +55,40 @@ public class EhTagDatabaseTest {
     assertEquals("123", db.getTranslation("abc"));
     assertEquals("1234", db.getTranslation("abcd"));
     assertNull(db.getTranslation("21"));
+  }
+
+  /** 从内存构建数据库，不依赖资源文件，验证存储与查询。 */
+  @Test
+  public void inMemoryStorageAndQuery() throws IOException {
+    // 格式：每条记录 tag + '\r' + Base64(translation) + '\n'，按 tag 字典序
+    String[][] entries = {
+        {"1", "a"}, {"12", "ab"}, {"123", "abc"}, {"1234", "abcd"},
+        {"a", "1"}, {"ab", "12"}, {"abc", "123"}, {"abcd", "1234"}
+    };
+    ByteArrayOutputStream body = new ByteArrayOutputStream();
+    for (String[] e : entries) {
+      body.write(e[0].getBytes(StandardCharsets.UTF_8));
+      body.write('\r');
+      body.write(Base64.getEncoder().encode(e[1].getBytes(StandardCharsets.UTF_8)));
+      body.write('\n');
+    }
+    byte[] bodyBytes = body.toByteArray();
+    Buffer buf = new Buffer();
+    buf.writeInt(bodyBytes.length);
+    buf.write(bodyBytes);
+    EhTagDatabase db = new EhTagDatabase("in-memory", buf);
+    assertEquals("a", db.getTranslation("1"));
+    assertEquals("abcd", db.getTranslation("1234"));
+    assertEquals("1", db.getTranslation("a"));
+    assertNull(db.getTranslation("notfound"));
+  }
+
+  @Test
+  public void namespaceToPrefix() {
+    assertEquals("a:", EhTagDatabase.namespaceToPrefix("artist"));
+    assertEquals("c:", EhTagDatabase.namespaceToPrefix("character"));
+    assertEquals("", EhTagDatabase.namespaceToPrefix("misc"));
+    assertEquals("p:", EhTagDatabase.namespaceToPrefix("parody"));
+    assertNull(EhTagDatabase.namespaceToPrefix("unknown"));
   }
 }
