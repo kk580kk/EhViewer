@@ -54,18 +54,24 @@ public final class EhFilter {
             Filter filter = list.get(i);
             switch (filter.mode) {
                 case MODE_TITLE:
-                    filter.text = filter.text.toLowerCase();
+                    if (filter.text != null) {
+                        filter.text = filter.text.toLowerCase();
+                    }
                     mTitleFilterList.add(filter);
                     break;
                 case MODE_UPLOADER:
                     mUploaderFilterList.add(filter);
                     break;
                 case MODE_TAG:
-                    filter.text = filter.text.toLowerCase();
+                    if (filter.text != null) {
+                        filter.text = filter.text.toLowerCase();
+                    }
                     mTagFilterList.add(filter);
                     break;
                 case MODE_TAG_NAMESPACE:
-                    filter.text = filter.text.toLowerCase();
+                    if (filter.text != null) {
+                        filter.text = filter.text.toLowerCase();
+                    }
                     mTagNamespaceFilterList.add(filter);
                     break;
                 default:
@@ -92,24 +98,31 @@ public final class EhFilter {
     }
 
     public synchronized void addFilter(Filter filter) {
-        // enable filter by default before it is added to database
         filter.enable = true;
+        switch (filter.mode) {
+            case MODE_TITLE:
+            case MODE_TAG:
+            case MODE_TAG_NAMESPACE:
+                if (filter.text != null) {
+                    filter.text = filter.text.toLowerCase();
+                }
+                break;
+            default:
+                break;
+        }
         EhDB.addFilter(filter);
 
         switch (filter.mode) {
             case MODE_TITLE:
-                filter.text = filter.text.toLowerCase();
                 mTitleFilterList.add(filter);
                 break;
             case MODE_UPLOADER:
                 mUploaderFilterList.add(filter);
                 break;
             case MODE_TAG:
-                filter.text = filter.text.toLowerCase();
                 mTagFilterList.add(filter);
                 break;
             case MODE_TAG_NAMESPACE:
-                filter.text = filter.text.toLowerCase();
                 mTagNamespaceFilterList.add(filter);
                 break;
             default:
