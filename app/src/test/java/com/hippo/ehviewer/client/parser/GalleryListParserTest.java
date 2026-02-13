@@ -70,7 +70,7 @@ public class GalleryListParserTest {
 
   @Test
   public void testParse() throws Exception {
-    InputStream resource = GalleryPageApiParserTest.class.getResourceAsStream(file);
+    InputStream resource = GalleryListParserTest.class.getResourceAsStream(file);
     BufferedSource source = Okio.buffer(Okio.source(resource));
     String body = source.readUtf8();
 
@@ -80,7 +80,7 @@ public class GalleryListParserTest {
 
     result.galleryInfoList.forEach(gi -> {
       assertNotEquals(0, gi.gid);
-      assertNotEquals(0, gi.token);
+      assertNotNull(gi.token);
       assertNotNull(gi.title);
 
       //assertNotNull(gi.simpleTags);
@@ -106,5 +106,14 @@ public class GalleryListParserTest {
       }
       assertNotEquals(0, gi.pages);
     });
+  }
+
+  @Test
+  public void testParseNoHitsFound() throws Exception {
+    String body = "<p>No hits found</p>";
+    GalleryListParser.Result result = GalleryListParser.parse(body);
+    assertEquals(0, result.pages);
+    assertNotNull(result.galleryInfoList);
+    assertEquals(0, result.galleryInfoList.size());
   }
 }
