@@ -22,6 +22,7 @@ import android.webkit.MimeTypeMap;
 import androidx.annotation.Nullable;
 import com.hippo.beerbelly.SimpleDiskCache;
 import com.hippo.ehviewer.EhDB;
+import com.hippo.ehviewer.FilePathSpec;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.EhCacheKeyFactory;
 import com.hippo.ehviewer.client.EhUtils;
@@ -36,11 +37,9 @@ import com.hippo.unifile.UniFile;
 import com.hippo.yorozuya.FileUtils;
 import com.hippo.yorozuya.IOUtils;
 import com.hippo.yorozuya.MathUtils;
-import com.hippo.yorozuya.Utilities;
 import java.io.File;
 import java.io.IOException;
 import java.io.OutputStream;
-import java.util.Locale;
 
 public final class SpiderDen {
 
@@ -104,9 +103,9 @@ public final class SpiderDen {
                 }
             }
 
-            // Create it
+            // Create it (FilePathSpec: gallery dir = {gid}-{sanitized_title})
             if (null == dirname) {
-                dirname = FileUtils.sanitizeFilename(galleryInfo.gid + "-" + EhUtils.getSuitableTitle(galleryInfo));
+                dirname = FilePathSpec.formatGalleryDirname(galleryInfo.gid, EhUtils.getSuitableTitle(galleryInfo));
                 EhDB.putDownloadDirname(galleryInfo.gid, dirname);
             }
 
@@ -162,7 +161,7 @@ public final class SpiderDen {
      * @param extension with dot
      */
     public static String generateImageFilename(int index, String extension) {
-        return String.format(Locale.US, "%08d%s", index + 1, extension);
+        return FilePathSpec.formatDownloadImageFilename(index, extension);
     }
 
     @Nullable
@@ -191,11 +190,7 @@ public final class SpiderDen {
      * @param extension with dot
      */
     private String fixExtension(String extension) {
-        if (Utilities.contain(GalleryProvider2.SUPPORT_IMAGE_EXTENSIONS, extension)) {
-            return extension;
-        } else {
-            return GalleryProvider2.SUPPORT_IMAGE_EXTENSIONS[0];
-        }
+        return FilePathSpec.normalizeImageExtension(extension);
     }
 
     private boolean copyFromCacheToDownloadDir(int index) {

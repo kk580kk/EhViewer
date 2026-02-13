@@ -19,13 +19,13 @@ package com.hippo.ehviewer.gallery;
 import android.content.Context;
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.hippo.ehviewer.FilePathSpec;
 import com.hippo.ehviewer.client.data.GalleryInfo;
 import com.hippo.ehviewer.spider.SpiderQueen;
 import com.hippo.glgallery.GalleryProvider;
 import com.hippo.image.Image;
 import com.hippo.unifile.UniFile;
 import com.hippo.yorozuya.SimpleHandler;
-import java.util.Locale;
 
 public class EhGalleryProvider extends GalleryProvider2 implements SpiderQueen.OnSpiderListener {
 
@@ -71,7 +71,7 @@ public class EhGalleryProvider extends GalleryProvider2 implements SpiderQueen.O
     @NonNull
     @Override
     public String getImageFilename(int index) {
-        return String.format(Locale.US, "%d-%s-%08d", mGalleryInfo.gid, mGalleryInfo.token, index + 1);
+        return FilePathSpec.formatEhGalleryImageFilename(mGalleryInfo.gid, mGalleryInfo.token, index);
     }
 
     @Override

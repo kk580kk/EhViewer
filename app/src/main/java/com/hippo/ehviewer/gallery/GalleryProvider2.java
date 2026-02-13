@@ -18,18 +18,14 @@ package com.hippo.ehviewer.gallery;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.hippo.ehviewer.FilePathSpec;
 import com.hippo.glgallery.GalleryProvider;
 import com.hippo.unifile.UniFile;
 
 public abstract class GalleryProvider2 extends GalleryProvider {
 
-    // With dot
-    public static final String[] SUPPORT_IMAGE_EXTENSIONS = {
-            ".jpg", // Joint Photographic Experts Group
-            ".jpeg",
-            ".png", // Portable Network Graphics
-            ".gif", // Graphics Interchange Format
-    };
+    /** Supported image extensions (with dot). See {@link FilePathSpec#SUPPORT_IMAGE_EXTENSIONS}. */
+    public static final String[] SUPPORT_IMAGE_EXTENSIONS = FilePathSpec.SUPPORT_IMAGE_EXTENSIONS;
 
     public int getStartPage() {
         return 0;
