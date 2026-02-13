@@ -15,6 +15,7 @@ import {
   STATE_WAIT,
   isSupportedImageFile,
 } from './GalleryProvider.ets';
+import { Pipe } from './Pipe.ets';
 import { NaturalComparator } from '../util/NaturalComparator.ets';
 import {
   getExtension,
@@ -104,8 +105,8 @@ export class ArchiveGalleryProvider extends GalleryProvider {
   /** Cache of already-extracted image data, keyed by page index. */
   private cache: Map<number, Uint8Array> = new Map();
 
-  /** Set of page indices with active extractions (for cancellation). */
-  private activeExtractions: Set<number> = new Set();
+  /** Active extraction pipes, keyed by page index (for cancellation via closeReader). */
+  private activeExtractions: Map<number, Pipe> = new Map();
 
   constructor(filePath: string, reader: ArchiveReader, fs: ArchiveFsOps) {
     super();
@@ -123,6 +124,9 @@ export class ArchiveGalleryProvider extends GalleryProvider {
     super.stop();
     this.reader.close();
     this.cache.clear();
+    for (const pipe of this.activeExtractions.values()) {
+      pipe.closeReader();
+    }
     this.activeExtractions.clear();
   }
 
@@ -179,7 +183,11 @@ export class ArchiveGalleryProvider extends GalleryProvider {
   }
 
   protected override onCancelRequest(index: number): void {
-    this.activeExtractions.delete(index);
+    const pipe = this.activeExtractions.get(index);
+    if (pipe !== undefined) {
+      pipe.closeReader();
+      this.activeExtractions.delete(index);
+    }
   }
 
   // ---- Internal ----
@@ -217,20 +225,24 @@ export class ArchiveGalleryProvider extends GalleryProvider {
   }
 
   /**
-   * Streaming extraction: read chunks on-the-fly, report progress,
-   * and assemble the final buffer. Supports cancellation.
+   * Streaming extraction: bridge the entry's stream through a Pipe,
+   * reading chunks on-the-fly with progress reporting.
+   * Cancellation is achieved by calling pipe.closeReader() which stops
+   * the source iteration in Pipe.fromAsyncIterable().
    */
   private extractStreaming(index: number, entry: StreamableArchiveEntry): void {
-    this.activeExtractions.add(index);
+    const pipe = Pipe.fromAsyncIterable(entry.openStream());
+    this.activeExtractions.set(index, pipe);
     const totalSize = entry.uncompressedSize;
 
     (async () => {
       const chunks: Uint8Array[] = [];
       let receivedBytes = 0;
 
-      for await (const chunk of entry.openStream()) {
+      for await (const chunk of pipe) {
         // Check cancellation / stopped
         if (!this.isStarted() || !this.activeExtractions.has(index)) {
+          pipe.closeReader();
           return;
         }
 
