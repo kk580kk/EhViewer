@@ -39,6 +39,24 @@ export interface DirGalleryFsOps {
   existsSync(path: string): boolean;
 }
 
+/**
+ * Sorting mode for image file names.
+ * - 'name_natural': numbers within names are compared numerically.
+ * - 'name_lexicographic': pure string comparison.
+ */
+export type SortMode = 'name_natural' | 'name_lexicographic';
+
+/**
+ * Sort direction.
+ */
+export type SortOrder = 'asc' | 'desc';
+
+/** Configuration for sorting the image file list. */
+export interface SortConfig {
+  mode?: SortMode;
+  order?: SortOrder;
+}
+
 const naturalCmp = new NaturalComparator();
 
 /**
@@ -52,6 +70,8 @@ export class DirGalleryProvider extends GalleryProvider {
 
   private readonly dirPath: string;
   private readonly fs: DirGalleryFsOps;
+  private readonly sortMode: SortMode;
+  private readonly sortOrder: SortOrder;
 
   /** Sorted list of image file names (relative to dirPath). */
   private fileList: string[] | null = null;
@@ -61,10 +81,12 @@ export class DirGalleryProvider extends GalleryProvider {
   /** Queue of pending request indices. */
   private pendingRequests: number[] = [];
 
-  constructor(dirPath: string, fs: DirGalleryFsOps) {
+  constructor(dirPath: string, fs: DirGalleryFsOps, sortConfig?: SortConfig) {
     super();
     this.dirPath = dirPath;
     this.fs = fs;
+    this.sortMode = sortConfig?.mode ?? 'name_natural';
+    this.sortOrder = sortConfig?.order ?? 'asc';
   }
 
   override start(): void {
@@ -129,6 +151,26 @@ export class DirGalleryProvider extends GalleryProvider {
     }
   }
 
+  // ---- Pagination ----
+
+  /**
+   * Return a slice of the sorted file name list.
+   *
+   * Useful for UI thumbnail grids that display a page of results at a time.
+   *
+   * @param offset 0-based start index (clamped to valid range).
+   * @param limit  Maximum number of names to return (clamped to remaining items).
+   * @returns Array of file names (without directory prefix) in sorted order,
+   *          or an empty array if the provider has not been started or the
+   *          directory could not be read.
+   */
+  getFileNames(offset: number, limit: number): string[] {
+    if (this.fileList === null || limit <= 0) return [];
+    const start = Math.max(0, Math.min(offset, this.fileList.length));
+    const end = Math.min(start + limit, this.fileList.length);
+    return this.fileList.slice(start, end);
+  }
+
   // ---- Internal ----
 
   private scanDirectory(): void {
@@ -142,7 +184,7 @@ export class DirGalleryProvider extends GalleryProvider {
 
       const allNames = this.fs.readdirSync(this.dirPath);
       const imageNames = allNames.filter(name => isSupportedImageFile(name));
-      imageNames.sort((a, b) => naturalCmp.compare(a, b));
+      this.sortFileList(imageNames);
 
       this.fileList = imageNames;
       this.pageCount = imageNames.length;
@@ -151,6 +193,24 @@ export class DirGalleryProvider extends GalleryProvider {
       this.pageCount = STATE_ERROR;
       this.error = e instanceof Error ? e.message : 'Failed to scan directory';
       this.notifyDataChanged();
+    }
+  }
+
+  /** Sort the file list in-place according to the configured mode and order. */
+  private sortFileList(names: string[]): void {
+    const ascending = this.sortOrder === 'asc';
+
+    if (this.sortMode === 'name_lexicographic') {
+      names.sort((a, b) => {
+        const cmp = a.toLowerCase().localeCompare(b.toLowerCase());
+        return ascending ? cmp : -cmp;
+      });
+    } else {
+      // Default: NAME_NATURAL
+      names.sort((a, b) => {
+        const cmp = naturalCmp.compare(a, b);
+        return ascending ? cmp : -cmp;
+      });
     }
   }
 

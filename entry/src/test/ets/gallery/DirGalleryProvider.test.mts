@@ -2,7 +2,7 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 
 import { DirGalleryProvider } from '../../../main/ets/gallery/DirGalleryProvider.ets';
-import type { DirGalleryFsOps } from '../../../main/ets/gallery/DirGalleryProvider.ets';
+import type { DirGalleryFsOps, SortConfig } from '../../../main/ets/gallery/DirGalleryProvider.ets';
 import { STATE_ERROR } from '../../../main/ets/gallery/GalleryProvider.ets';
 import type { GalleryProviderListener } from '../../../main/ets/gallery/GalleryProvider.ets';
 
@@ -73,8 +73,8 @@ describe('DirGalleryProvider', () => {
     listener = new TestListener();
   });
 
-  function createProvider(): DirGalleryProvider {
-    const p = new DirGalleryProvider(DIR, fs);
+  function createProvider(sortConfig?: SortConfig): DirGalleryProvider {
+    const p = new DirGalleryProvider(DIR, fs, sortConfig);
     p.addListener(listener);
     return p;
   }
@@ -238,5 +238,120 @@ describe('DirGalleryProvider', () => {
 
     assert.strictEqual(listener.pageSucceeds.length, 1);
     assert.deepStrictEqual(listener.pageSucceeds[0].data, imgData);
+  });
+
+  // ---- Sort mode tests ----
+
+  it('should sort lexicographically when SortMode.NAME_LEXICOGRAPHIC', () => {
+    fs.addDir(DIR, ['page10.jpg', 'page2.jpg', 'page1.jpg']);
+    fs.addFile(`${DIR}/page1.jpg`, new Uint8Array([1]));
+    fs.addFile(`${DIR}/page2.jpg`, new Uint8Array([2]));
+    fs.addFile(`${DIR}/page10.jpg`, new Uint8Array([10]));
+
+    const provider = createProvider({ mode: 'name_lexicographic' });
+    provider.start();
+
+    // Lexicographic: page1 < page10 < page2 (because '1' < '2' but '10' < '2')
+    assert.strictEqual(provider.getImageFilename(0), 'page1');
+    assert.strictEqual(provider.getImageFilename(1), 'page10');
+    assert.strictEqual(provider.getImageFilename(2), 'page2');
+  });
+
+  it('should sort in descending order when SortOrder.DESC', () => {
+    fs.addDir(DIR, ['a.jpg', 'c.jpg', 'b.jpg']);
+    fs.addFile(`${DIR}/a.jpg`, new Uint8Array([1]));
+    fs.addFile(`${DIR}/b.jpg`, new Uint8Array([2]));
+    fs.addFile(`${DIR}/c.jpg`, new Uint8Array([3]));
+
+    const provider = createProvider({ order: 'desc' });
+    provider.start();
+
+    assert.strictEqual(provider.getImageFilename(0), 'c');
+    assert.strictEqual(provider.getImageFilename(1), 'b');
+    assert.strictEqual(provider.getImageFilename(2), 'a');
+  });
+
+  it('should support descending natural sort', () => {
+    fs.addDir(DIR, ['page10.jpg', 'page2.jpg', 'page1.jpg']);
+    fs.addFile(`${DIR}/page1.jpg`, new Uint8Array([1]));
+    fs.addFile(`${DIR}/page2.jpg`, new Uint8Array([2]));
+    fs.addFile(`${DIR}/page10.jpg`, new Uint8Array([10]));
+
+    const provider = createProvider({
+      mode: 'name_natural',
+      order: 'desc',
+    });
+    provider.start();
+
+    // Natural descending: page10 > page2 > page1
+    assert.strictEqual(provider.getImageFilename(0), 'page10');
+    assert.strictEqual(provider.getImageFilename(1), 'page2');
+    assert.strictEqual(provider.getImageFilename(2), 'page1');
+  });
+
+  it('should default to natural ascending when no sort config', () => {
+    fs.addDir(DIR, ['page10.jpg', 'page2.jpg', 'page1.jpg']);
+    fs.addFile(`${DIR}/page1.jpg`, new Uint8Array([1]));
+    fs.addFile(`${DIR}/page2.jpg`, new Uint8Array([2]));
+    fs.addFile(`${DIR}/page10.jpg`, new Uint8Array([10]));
+
+    const provider = createProvider();
+    provider.start();
+
+    assert.strictEqual(provider.getImageFilename(0), 'page1');
+    assert.strictEqual(provider.getImageFilename(1), 'page2');
+    assert.strictEqual(provider.getImageFilename(2), 'page10');
+  });
+
+  // ---- Pagination tests ----
+
+  it('getFileNames should return a page of file names', () => {
+    fs.addDir(DIR, ['c.jpg', 'a.jpg', 'b.jpg', 'd.jpg', 'e.jpg']);
+    for (const n of ['a', 'b', 'c', 'd', 'e']) {
+      fs.addFile(`${DIR}/${n}.jpg`, new Uint8Array([1]));
+    }
+
+    const provider = createProvider();
+    provider.start();
+
+    assert.deepStrictEqual(provider.getFileNames(0, 2), ['a.jpg', 'b.jpg']);
+    assert.deepStrictEqual(provider.getFileNames(2, 2), ['c.jpg', 'd.jpg']);
+    assert.deepStrictEqual(provider.getFileNames(4, 2), ['e.jpg']);
+  });
+
+  it('getFileNames should clamp offset and limit', () => {
+    fs.addDir(DIR, ['a.jpg', 'b.jpg']);
+    fs.addFile(`${DIR}/a.jpg`, new Uint8Array([1]));
+    fs.addFile(`${DIR}/b.jpg`, new Uint8Array([2]));
+
+    const provider = createProvider();
+    provider.start();
+
+    // Offset beyond end
+    assert.deepStrictEqual(provider.getFileNames(10, 5), []);
+    // Negative offset clamped to 0
+    assert.deepStrictEqual(provider.getFileNames(-1, 2), ['a.jpg', 'b.jpg']);
+    // Limit of 0
+    assert.deepStrictEqual(provider.getFileNames(0, 0), []);
+    // Negative limit
+    assert.deepStrictEqual(provider.getFileNames(0, -1), []);
+  });
+
+  it('getFileNames should return empty before start', () => {
+    const provider = createProvider();
+    assert.deepStrictEqual(provider.getFileNames(0, 10), []);
+  });
+
+  it('getFileNames should respect sort order', () => {
+    fs.addDir(DIR, ['c.jpg', 'a.jpg', 'b.jpg']);
+    for (const n of ['a', 'b', 'c']) {
+      fs.addFile(`${DIR}/${n}.jpg`, new Uint8Array([1]));
+    }
+
+    const provider = createProvider({ order: 'desc' });
+    provider.start();
+
+    assert.deepStrictEqual(provider.getFileNames(0, 2), ['c.jpg', 'b.jpg']);
+    assert.deepStrictEqual(provider.getFileNames(2, 2), ['a.jpg']);
   });
 });
