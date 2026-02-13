@@ -20,6 +20,13 @@ import android.os.Parcel;
 import android.os.Parcelable;
 import androidx.annotation.Nullable;
 
+import com.hippo.ehviewer.client.EhUtils;
+import com.hippo.ehviewer.client.parser.ParserUtils;
+
+import org.json.JSONArray;
+import org.json.JSONException;
+import org.json.JSONObject;
+
 public class GalleryApiInfo implements Parcelable {
 
     public long gid;
@@ -38,6 +45,41 @@ public class GalleryApiInfo implements Parcelable {
     public int torrentcount;
     @Nullable
     public String[] tags;
+
+    /**
+     * Parses a single gallery object from the gmetadata API response.
+     *
+     * @param g JSON object for one gallery (e.g. from the "gmetadata" array)
+     * @return parsed GalleryApiInfo, never null
+     */
+    public static GalleryApiInfo fromJson(JSONObject g) throws JSONException {
+        GalleryApiInfo info = new GalleryApiInfo();
+        info.gid = g.getLong("gid");
+        info.token = g.optString("token", null);
+        info.archiverKey = g.optString("archiver_key", null);
+        info.title = ParserUtils.trim(g.optString("title", ""));
+        info.titleJpn = ParserUtils.trim(g.optString("title_jpn", ""));
+        info.category = EhUtils.getCategory(g.optString("category", ""));
+        info.thumb = g.optString("thumb", null);
+        info.uploader = g.optString("uploader", null);
+        info.posted = ParserUtils.parseLong(g.optString("posted", "0"), 0L);
+        info.filecount = ParserUtils.parseInt(g.optString("filecount", "0"), 0);
+        info.filesize = ParserUtils.parseLong(g.optString("filesize", "0"), 0L);
+        info.expunged = g.optBoolean("expunged", false);
+        info.rating = ParserUtils.parseFloat(g.optString("rating", "0"), 0.0f);
+        info.torrentcount = ParserUtils.parseInt(g.optString("torrentcount", "0"), 0);
+        JSONArray tagArr = g.optJSONArray("tags");
+        if (tagArr != null) {
+            int len = tagArr.length();
+            info.tags = new String[len];
+            for (int i = 0; i < len; i++) {
+                info.tags[i] = tagArr.getString(i);
+            }
+        } else {
+            info.tags = null;
+        }
+        return info;
+    }
 
     @Override
     public int describeContents() {
