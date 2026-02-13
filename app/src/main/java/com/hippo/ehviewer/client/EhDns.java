@@ -59,7 +59,11 @@ public class EhDns implements Dns {
   private final Hosts hosts;
 
   public EhDns(Context context) {
-    hosts = EhApplication.getHosts(context);
+    this(EhApplication.getHosts(context));
+  }
+
+  EhDns(Hosts hosts) {
+    this.hosts = hosts;
   }
 
   @Override
