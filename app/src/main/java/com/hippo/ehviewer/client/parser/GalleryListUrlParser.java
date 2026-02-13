@@ -20,6 +20,7 @@ import android.text.TextUtils;
 
 import com.hippo.ehviewer.client.EhUrl;
 import com.hippo.ehviewer.client.data.ListUrlBuilder;
+import com.hippo.yorozuya.NumberUtils;
 import com.hippo.yorozuya.Utilities;
 
 import java.io.UnsupportedEncodingException;
@@ -54,6 +55,7 @@ public final class GalleryListUrlParser {
         if (PATH_NORMAL.equals(path) || path.length() == 0) {
             ListUrlBuilder builder = new ListUrlBuilder();
             builder.setQuery(url.getQuery());
+            parsePageFromQuery(url.getQuery(), builder);
             return builder;
         } else if (path.startsWith(PATH_UPLOADER)) {
             return parseUploader(path);
@@ -68,6 +70,7 @@ public final class GalleryListUrlParser {
             }
             ListUrlBuilder builder = new ListUrlBuilder();
             builder.setQuery(url.getQuery());
+            parsePageFromQuery(url.getQuery(), builder);
             builder.setCategory(category);
             return builder;
         } else {
@@ -75,7 +78,6 @@ public final class GalleryListUrlParser {
         }
     }
 
-    // TODO get page
     private static ListUrlBuilder parseUploader(String path) {
         String uploader;
         int prefixLength = PATH_UPLOADER.length();
@@ -100,15 +102,14 @@ public final class GalleryListUrlParser {
         ListUrlBuilder builder = new ListUrlBuilder();
         builder.setMode(ListUrlBuilder.MODE_UPLOADER);
         builder.setKeyword(uploader);
+        parsePageFromPath(path, index, builder);
         return builder;
     }
 
-    // TODO get page
     private static ListUrlBuilder parseTag(String path) {
         String tag;
         int prefixLength = PATH_TAG.length();
         int index = path.indexOf('/', prefixLength);
-
 
         if (index < 0) {
             tag = path.substring(prefixLength);
@@ -129,6 +130,40 @@ public final class GalleryListUrlParser {
         ListUrlBuilder builder = new ListUrlBuilder();
         builder.setMode(ListUrlBuilder.MODE_TAG);
         builder.setKeyword(tag);
+        parsePageFromPath(path, index, builder);
         return builder;
+    }
+
+    private static void parsePageFromQuery(String query, ListUrlBuilder builder) {
+        if (TextUtils.isEmpty(query)) {
+            return;
+        }
+        for (String pair : query.split("&")) {
+            int eq = pair.indexOf('=');
+            if (eq < 0) {
+                continue;
+            }
+            if ("page".equals(pair.substring(0, eq))) {
+                int page = NumberUtils.parseIntSafely(pair.substring(eq + 1), -1);
+                if (page >= 0) {
+                    builder.setPageIndex(page);
+                }
+                return;
+            }
+        }
+    }
+
+    private static void parsePageFromPath(String path, int slashIndex, ListUrlBuilder builder) {
+        if (slashIndex < 0) {
+            return;
+        }
+        String rest = path.substring(slashIndex + 1).trim();
+        if (rest.isEmpty()) {
+            return;
+        }
+        int page = NumberUtils.parseIntSafely(rest, -1);
+        if (page >= 0) {
+            builder.setPageIndex(page);
+        }
     }
 }
