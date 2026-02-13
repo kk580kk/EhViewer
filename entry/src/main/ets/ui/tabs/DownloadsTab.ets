@@ -43,16 +43,27 @@ export struct DownloadsTab {
   onStop: (gid: number) => void = () => {};
   /** Callback when user selects a label filter. */
   onLabelChange: (label: string | null) => void = () => {};
+  /** Callback when user triggers refresh. */
+  onRefresh: () => void = () => {};
 
   build() {
     Column() {
-      // Header with label filter
+      // Header with label filter and refresh
       Row() {
         Text('Downloads')
           .fontSize(18)
           .fontWeight(FontWeight.Bold)
           .fontColor('#1a1a1a')
           .layoutWeight(1)
+
+        // Refresh button
+        Text('\u{1F504}')
+          .fontSize(20)
+          .fontColor('#4169E1')
+          .padding(8)
+          .onClick(() => {
+            this.onRefresh();
+          })
 
         // Label selector (shown as text button)
         Text(this.labelNames[this.selectedLabelIndex] ?? 'All Downloads')

@@ -22,12 +22,15 @@ import {
   TAB_DOWNLOADS,
   TAB_SETTINGS,
 } from '../router/TabConfig.ets';
+import { GalleryListViewModel, ListState, ListMode } from '../viewmodel/GalleryListViewModel.ets';
 import { FavoritesViewModel } from '../viewmodel/FavoritesViewModel.ets';
 import { HistoryViewModel } from '../viewmodel/HistoryViewModel.ets';
 import { DownloadsViewModel } from '../viewmodel/DownloadsViewModel.ets';
 import { MemoryEhDB } from '../database/MemoryEhDB.ets';
 import { DataMappers } from '../viewmodel/DataMappers.ets';
 import { PageRouter } from '../router/PageRouter.ets';
+import { StubGalleryListFetcher } from '../client/StubGalleryListFetcher.ets';
+import router from '@ohos.router';
 
 /**
  * Main entry page with bottom tab navigation.
@@ -48,24 +51,99 @@ struct Index {
   private db = new MemoryEhDB();
 
   // ViewModels
+  private galleryListVM = new GalleryListViewModel(new StubGalleryListFetcher());
   private favVM = new FavoritesViewModel(this.db);
   private historyVM = new HistoryViewModel(this.db);
   private downloadsVM = new DownloadsViewModel(this.db);
 
-  // UI data arrays
+  // Gallery list UI state
+  @State galleryItems: GalleryItemData[] = [];
+  @State galleryListState: number = ListState.IDLE;
+  @State galleryHasMore: boolean = false;
+  @State galleryError: string = '';
+  @State galleryModeTitle: string = 'Homepage';
+
+  // Favorites UI data
   @State favItems: GalleryItemData[] = [];
   @State favEmpty: boolean = true;
+
+  // History UI data
   @State historyItems: HistoryItemData[] = [];
   @State historyEmpty: boolean = true;
+
+  // Downloads UI data
   @State downloadItems: DownloadItemData[] = [];
   @State downloadEmpty: boolean = true;
   @State downloadLabelNames: string[] = ['All Downloads'];
 
   aboutToAppear(): void {
+    // Inject real router navigator
+    PageRouter.setNavigator({
+      pushUrl(url: string, params?: Record<string, Object>): void {
+        router.pushUrl({ url, params }).catch(() => {});
+      },
+      replaceUrl(url: string, params?: Record<string, Object>): void {
+        router.replaceUrl({ url, params }).catch(() => {});
+      },
+      back(): void {
+        router.back();
+      },
+    });
+
+    this.loadGalleryList();
     this.loadFavorites();
     this.loadHistory();
     this.loadDownloads();
   }
+
+  // ---- Gallery List ----
+
+  private async loadGalleryList(): Promise<void> {
+    await this.galleryListVM.load();
+    this.syncGalleryListState();
+  }
+
+  private async refreshGalleryList(): Promise<void> {
+    await this.galleryListVM.refresh();
+    this.syncGalleryListState();
+  }
+
+  private async loadMoreGalleries(): Promise<void> {
+    await this.galleryListVM.loadMore();
+    this.syncGalleryListState();
+  }
+
+  private async searchGalleries(keyword: string): Promise<void> {
+    await this.galleryListVM.search(keyword);
+    this.syncGalleryListState();
+  }
+
+  private async clearGallerySearch(): Promise<void> {
+    await this.galleryListVM.clearSearch();
+    this.syncGalleryListState();
+  }
+
+  private async switchGalleryMode(mode: number): Promise<void> {
+    let listMode: ListMode;
+    switch (mode) {
+      case 1: listMode = ListMode.SUBSCRIPTION; break;
+      case 2: listMode = ListMode.WHATS_HOT; break;
+      default: listMode = ListMode.HOMEPAGE; break;
+    }
+    this.galleryListVM.setListMode(listMode);
+    await this.galleryListVM.load();
+    this.syncGalleryListState();
+  }
+
+  private syncGalleryListState(): void {
+    this.galleryItems = DataMappers.toGalleryItems(this.galleryListVM.items);
+    this.galleryListState = this.galleryListVM.state;
+    this.galleryHasMore = this.galleryListVM.hasMore;
+    this.galleryError = this.galleryListVM.error;
+    this.galleryModeTitle = this.galleryListVM.modeTitle;
+  }
+
+  // ---- Favorites ----
 
   private loadFavorites(): void {
     this.favVM.load();
@@ -73,11 +151,15 @@ struct Index {
     this.favEmpty = this.favVM.isEmpty;
   }
 
+  // ---- History ----
+
   private loadHistory(): void {
     this.historyVM.load();
     this.historyItems = DataMappers.toHistoryItems(this.historyVM.items);
     this.historyEmpty = this.historyVM.isEmpty;
   }
+
+  // ---- Downloads ----
 
   private loadDownloads(): void {
     this.downloadsVM.load();
@@ -85,6 +167,8 @@ struct Index {
     this.downloadEmpty = this.downloadsVM.isEmpty;
     this.downloadLabelNames = this.downloadsVM.labelNames;
   }
+
+  // ---- Navigation ----
 
   private navigateToDetail(gid: number, token: string): void {
     PageRouter.toGalleryDetail(gid, token);
@@ -112,7 +196,31 @@ struct Index {
     Column() {
       Tabs({ barPosition: BarPosition.End, index: this.currentTab }) {
         TabContent() {
-          GalleryListTab()
+          GalleryListTab({
+            items: this.galleryItems,
+            listState: this.galleryListState,
+            hasMore: this.galleryHasMore,
+            errorMessage: this.galleryError,
+            modeTitle: this.galleryModeTitle,
+            onItemClick: (gid: number, token: string) => {
+              this.navigateToDetail(gid, token);
+            },
+            onRefresh: () => {
+              this.refreshGalleryList();
+            },
+            onLoadMore: () => {
+              this.loadMoreGalleries();
+            },
+            onSearch: (keyword: string) => {
+              this.searchGalleries(keyword);
+            },
+            onClearSearch: () => {
+              this.clearGallerySearch();
+            },
+            onModeChange: (mode: number) => {
+              this.switchGalleryMode(mode);
+            },
+          })
         }
         .tabBar(this.tabBuilder(TAB_GALLERY))
 
@@ -187,6 +295,9 @@ struct Index {
               this.downloadItems = DataMappers.toDownloadItems(this.downloadsVM.items);
               this.downloadEmpty = this.downloadsVM.isEmpty;
             },
+            onRefresh: () => {
+              this.loadDownloads();
+            },
           })
         }
         .tabBar(this.tabBuilder(TAB_DOWNLOADS))
@@ -201,7 +312,9 @@ struct Index {
       .onChange((index: number) => {
         this.currentTab = index;
         // Reload data when switching to a tab
-        if (index === TAB_FAVORITES) {
+        if (index === TAB_GALLERY) {
+          this.syncGalleryListState();
+        } else if (index === TAB_FAVORITES) {
           this.loadFavorites();
         } else if (index === TAB_HISTORY) {
           this.loadHistory();
