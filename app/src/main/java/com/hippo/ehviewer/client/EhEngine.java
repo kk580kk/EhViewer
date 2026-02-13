@@ -140,6 +140,33 @@ public class EhEngine {
         }
     }
 
+    /**
+     * Executes an Eh request (built with {@link EhRequestBuilder}), returns response body,
+     * and maps any error (cancel, sad panda, kokomade, HTTP 4xx/5xx, parse/IO) to the exception system.
+     */
+    private static String executeRequest(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
+            Request request) throws Throwable {
+        Call call = okHttpClient.newCall(request);
+        if (task != null) {
+            task.setCall(call);
+        }
+        String body = null;
+        Headers headers = null;
+        int code = -1;
+        try {
+            Response response = call.execute();
+            code = response.code();
+            headers = response.headers();
+            body = response.body().string();
+            doThrowException(call, code, headers, body, null);
+            return body;
+        } catch (Throwable e) {
+            ExceptionUtils.throwIfFatal(e);
+            throwException(call, code, headers, body, e);
+            throw e;
+        }
+    }
+
     public static String signIn(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
             String username, String password) throws Throwable {
         FormBody.Builder builder = new FormBody.Builder()
@@ -155,27 +182,8 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(builder.build())
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return SignInParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return SignInParser.parse(body);
     }
 
     private static void fillGalleryList(@Nullable EhClient.Task task, OkHttpClient okHttpClient, List<GalleryInfo> list, String url, boolean filter) throws Throwable {
@@ -236,31 +244,9 @@ public class EhEngine {
         String referer = EhUrl.getReferer();
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        GalleryListParser.Result result;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            result = GalleryListParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
+        String body = executeRequest(task, okHttpClient, request);
+        GalleryListParser.Result result = GalleryListParser.parse(body);
         fillGalleryList(task, okHttpClient, result.galleryInfoList, url, true);
-
         return result;
     }
 
@@ -300,27 +286,8 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(RequestBody.create(MEDIA_TYPE_JSON, json.toString()))
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            GalleryApiParser.parse(body, galleryInfoList);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        GalleryApiParser.parse(body, galleryInfoList);
     }
 
     public static GalleryDetail getGalleryDetail(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
@@ -328,27 +295,8 @@ public class EhEngine {
         String referer = EhUrl.getReferer();
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return GalleryDetailParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return GalleryDetailParser.parse(body);
     }
 
 
@@ -357,28 +305,9 @@ public class EhEngine {
         String referer = EhUrl.getReferer();
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return Pair.create(GalleryDetailParser.parsePreviewSet(body),
-                    GalleryDetailParser.parsePreviewPages(body));
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return Pair.create(GalleryDetailParser.parsePreviewSet(body),
+                GalleryDetailParser.parsePreviewPages(body));
     }
 
     public static RateGalleryParser.Result rateGallery(@Nullable EhClient.Task task,
@@ -399,27 +328,8 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(requestBody)
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return RateGalleryParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return RateGalleryParser.parse(body);
     }
 
     public static GalleryCommentList commentGallery(@Nullable EhClient.Task task,
@@ -436,34 +346,13 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, url, origin)
                 .post(builder.build())
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
+        String body = executeRequest(task, okHttpClient, request);
+        Document document = Jsoup.parse(body);
+        Elements elements = document.select("#chd + p");
+        if (elements.size() > 0) {
+            throw new EhException(elements.get(0).text());
         }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            Document document = Jsoup.parse(body);
-
-            Elements elements = document.select("#chd + p");
-            if (elements.size() > 0) {
-                throw new EhException(elements.get(0).text());
-            }
-
-            return GalleryDetailParser.parseComments(document);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        return GalleryDetailParser.parseComments(document);
     }
 
     public static String getGalleryToken(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
@@ -480,27 +369,8 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(requestBody)
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return GalleryTokenApiParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return GalleryTokenApiParser.parse(body);
     }
 
     public static FavoritesParser.Result getFavorites(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
@@ -508,31 +378,9 @@ public class EhEngine {
         String referer = EhUrl.getReferer();
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        FavoritesParser.Result result;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            result = FavoritesParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
+        String body = executeRequest(task, okHttpClient, request);
+        FavoritesParser.Result result = FavoritesParser.parse(body);
         fillGalleryList(task, okHttpClient, result.galleryInfoList, url, false);
-
         return result;
     }
 
@@ -562,28 +410,7 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, url, origin)
                 .post(builder.build())
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            throwException(call, code, headers, body, null);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
+        executeRequest(task, okHttpClient, request);
         return null;
     }
 
@@ -617,31 +444,9 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, url, origin)
                 .post(builder.build())
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        FavoritesParser.Result result;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            result = FavoritesParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
+        String body = executeRequest(task, okHttpClient, request);
+        FavoritesParser.Result result = FavoritesParser.parse(body);
         fillGalleryList(task, okHttpClient, result.galleryInfoList, url, false);
-
         return result;
     }
 
@@ -650,30 +455,8 @@ public class EhEngine {
         String referer = EhUrl.getGalleryDetailUrl(gid, token);
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        Pair<String, String>[] result;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            result = TorrentParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
-        return result;
+        String body = executeRequest(task, okHttpClient, request);
+        return TorrentParser.parse(body);
     }
 
     public static Pair<String, Pair<String, String>[]> getArchiveList(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
@@ -681,30 +464,8 @@ public class EhEngine {
         String referer = EhUrl.getGalleryDetailUrl(gid, token);
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        Pair<String, Pair<String, String>[]> result;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            result = ArchiveParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
-        return result;
+        String body = executeRequest(task, okHttpClient, request);
+        return ArchiveParser.parse(body);
     }
 
     public static Void downloadArchive(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
@@ -724,33 +485,11 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(builder.build())
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            throwException(call, code, headers, body, null);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
+        String body = executeRequest(task, okHttpClient, request);
         Matcher m = PATTERN_NEED_HATH_CLIENT.matcher(body);
         if (m.find()) {
             throw new NoHAtHClientException();
         }
-
         return null;
     }
 
@@ -758,27 +497,8 @@ public class EhEngine {
             OkHttpClient okHttpClient, String url, String referer) throws Throwable {
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return ProfileParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return ProfileParser.parse(body);
     }
 
     public static ProfileParser.Result getProfile(@Nullable EhClient.Task task,
@@ -786,27 +506,8 @@ public class EhEngine {
         String url = EhUrl.URL_FORUMS;
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, null).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return getProfileInternal(task, okHttpClient, ForumsParser.parse(body), url);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return getProfileInternal(task, okHttpClient, ForumsParser.parse(body), url);
     }
 
     public static VoteCommentParser.Result voteComment(@Nullable EhClient.Task task, OkHttpClient okHttpClient,
@@ -827,27 +528,8 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(requestBody)
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return VoteCommentParser.parse(body, commentVote);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return VoteCommentParser.parse(body, commentVote);
     }
 
     /**
@@ -890,34 +572,9 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
                 .post(builder.build())
                 .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        GalleryListParser.Result result;
-        int code = -1;
-        try {
-            Response response = call.execute();
-
-            Log.d(TAG, "" + response.request().url().toString());
-
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            result = GalleryListParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
-
+        String body = executeRequest(task, okHttpClient, request);
+        GalleryListParser.Result result = GalleryListParser.parse(body);
         fillGalleryList(task, okHttpClient, result.galleryInfoList, url, true);
-
         return result;
     }
 
@@ -926,27 +583,8 @@ public class EhEngine {
         String referer = EhUrl.getGalleryDetailUrl(gid, token);
         Log.d(TAG, url);
         Request request = new EhRequestBuilder(url, referer).build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return GalleryPageParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return GalleryPageParser.parse(body);
     }
 
     public static GalleryPageApiParser.Result getGalleryPageApi(@Nullable EhClient.Task task,
@@ -968,26 +606,7 @@ public class EhEngine {
         Request request = new EhRequestBuilder(url, referer, origin)
             .post(requestBody)
             .build();
-        Call call = okHttpClient.newCall(request);
-
-        // Put call
-        if (null != task) {
-            task.setCall(call);
-        }
-
-        String body = null;
-        Headers headers = null;
-        int code = -1;
-        try {
-            Response response = call.execute();
-            code = response.code();
-            headers = response.headers();
-            body = response.body().string();
-            return GalleryPageApiParser.parse(body);
-        } catch (Throwable e) {
-            ExceptionUtils.throwIfFatal(e);
-            throwException(call, code, headers, body, e);
-            throw e;
-        }
+        String body = executeRequest(task, okHttpClient, request);
+        return GalleryPageApiParser.parse(body);
     }
 }
