@@ -13,6 +13,8 @@ import { GalleryInfo } from '../model/GalleryInfo.ets';
 import type { DownloadDB } from './DownloadDB.ets';
 import { DownloadInfo } from './DownloadInfo.ets';
 import { DownloadLabel } from './DownloadLabel.ets';
+import type { DownloadProgressCallback } from './DownloadProgressCallback.ets';
+import { DownloadProgressEvent } from './DownloadProgressEvent.ets';
 
 /**
  * Listener for download list changes (UI updates).
@@ -78,6 +80,7 @@ export class DownloadManager {
 
   private downloadListener: DownloadListener | null = null;
   private readonly downloadInfoListeners: DownloadInfoListener[] = [];
+  private readonly progressCallbacks: DownloadProgressCallback[] = [];
 
   /**
    * Optional hook called when a new task transitions to STATE_DOWNLOAD.
@@ -232,6 +235,28 @@ export class DownloadManager {
     this.downloadListener = listener;
   }
 
+  addProgressCallback(callback: DownloadProgressCallback): void {
+    this.progressCallbacks.push(callback);
+  }
+
+  removeProgressCallback(callback: DownloadProgressCallback): void {
+    const idx = this.progressCallbacks.indexOf(callback);
+    if (idx >= 0) {
+      this.progressCallbacks.splice(idx, 1);
+    }
+  }
+
+  private notifyProgressCallbacks(info: DownloadInfo, stateChanged: boolean): void {
+    if (this.progressCallbacks.length === 0) return;
+    const event = DownloadProgressEvent.from(info);
+    for (const cb of this.progressCallbacks) {
+      if (stateChanged) {
+        cb.onDownloadStateChanged(event);
+      }
+      cb.onDownloadProgress(event);
+    }
+  }
+
   // ---------------------------------------------------------------------------
   // Queue management – ensure / start / stop
   // ---------------------------------------------------------------------------
@@ -271,6 +296,8 @@ export class DownloadManager {
         l.onUpdate(info, list);
       }
     }
+
+    this.notifyProgressCallbacks(info, true);
 
     if (this.onStartDownload !== null) {
       this.onStartDownload(info);
@@ -483,6 +510,7 @@ export class DownloadManager {
     if (this.downloadListener !== null) {
       this.downloadListener.onCancel(info);
     }
+    this.notifyProgressCallbacks(info, true);
     return info;
   }
 
@@ -658,7 +686,33 @@ export class DownloadManager {
       }
     }
 
+    this.notifyProgressCallbacks(info, true);
+
     this.ensureDownload();
+  }
+
+  /**
+   * Signal a progress update for the current download (speed, page count, etc.).
+   * Called periodically by the download engine.
+   */
+  onDownloadProgress(finished: number, downloaded: number, total: number, speed: number, remaining: number): void {
+    const info = this.currentTask;
+    if (info === null) return;
+
+    info.finished = finished;
+    info.downloaded = downloaded;
+    info.total = total;
+    info.speed = speed;
+    info.remaining = remaining;
+
+    const list = this.getInfoListForLabel(info.label);
+    if (list !== null) {
+      for (const l of this.downloadInfoListeners) {
+        l.onUpdate(info, list);
+      }
+    }
+
+    this.notifyProgressCallbacks(info, false);
   }
 
   // ---------------------------------------------------------------------------
