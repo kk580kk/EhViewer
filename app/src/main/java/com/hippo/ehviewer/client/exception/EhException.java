@@ -16,7 +16,15 @@
 
 package com.hippo.ehviewer.client.exception;
 
+/**
+ * Base exception for EhViewer client errors (e.g. parse errors, auth errors).
+ * Subclasses: ParseException, OffensiveException, Image509Exception, etc.
+ */
 public class EhException extends Exception {
+
+    public EhException() {
+        super();
+    }
 
     public EhException(String detailMessage) {
         super(detailMessage);
@@ -24,5 +32,9 @@ public class EhException extends Exception {
 
     public EhException(String detailMessage, Throwable cause) {
         super(detailMessage, cause);
+    }
+
+    public EhException(Throwable cause) {
+        super(cause);
     }
 }
