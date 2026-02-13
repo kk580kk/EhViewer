@@ -9,10 +9,19 @@
  */
 
 import UIAbility from '@ohos.app.ability.UIAbility';
+import dataPreferences from '@ohos.data.preferences';
+import fileFs from '@ohos.file.fs';
 import window from '@ohos.window';
 import { SignInController } from '../client/SignInController.ets';
 import { Routes } from '../router/PageRouter.ets';
 import { AppInitializer } from '../AppInitializer.ets';
+import { OhosPreferencesStore } from '../preferences/OhosPreferencesStore.ets';
+import { MemoryDatabaseStore } from '../database/MemoryDatabaseStore.ets';
+import { createOhosHttpEngine } from '../network/OhosHttpEngine.ets';
+import http from '@ohos.net.http';
+import type { AppContextPaths } from '../AppConfig.ets';
+import type { ShareFsOps } from '../FileShareHelper.ets';
+import type { OhosPreferencesProxy } from '../preferences/OhosPreferencesStore.ets';
 
 /**
  * Application entry ability.
@@ -28,11 +37,54 @@ export default class EntryAbility extends UIAbility {
   private backgroundTimestamp: number = 0;
 
   onCreate(want, launchParam): void {
-    // Run the full global initialization sequence
-    const status = AppInitializer.initialize();
+    // Build platform context paths from UIAbilityContext
+    const ctxPaths: AppContextPaths = {
+      filesDir: this.context.filesDir,
+      cacheDir: this.context.cacheDir,
+      tempDir: this.context.tempDir,
+    };
 
-    if (!status.settings) {
-      // Settings init failed — log or handle gracefully
+    // Build filesystem adapter backed by @ohos.file.fs
+    const fsOps: ShareFsOps = {
+      mkdirSync: (p, opts) => fileFs.mkdirSync(p),
+      existsSync: (p) => fileFs.accessSync(p),
+      statSync: (p) => {
+        const stat = fileFs.statSync(p);
+        return {
+          isDirectory: () => stat.isDirectory(),
+          isFile: () => stat.isFile(),
+        };
+      },
+      writeFileSync: (p, data, enc) => {
+        const file = fileFs.openSync(p, fileFs.OpenMode.CREATE | fileFs.OpenMode.WRITE_ONLY);
+        if (typeof data === 'string') {
+          fileFs.writeSync(file.fd, data);
+        } else {
+          fileFs.writeSync(file.fd, (data as Uint8Array).buffer);
+        }
+        fileFs.closeSync(file);
+      },
+      unlinkSync: (p) => fileFs.unlinkSync(p),
+      readdirSync: (p) => fileFs.listFileSync(p),
+      copyFileSync: (src, dest) => fileFs.copyFileSync(src, dest),
+    };
+
+    // Build preferences store backed by @ohos.data.preferences
+    const ohosPrefs = dataPreferences.getPreferencesSync(this.context, { name: 'settings' });
+    const prefStore = new OhosPreferencesStore(ohosPrefs as OhosPreferencesProxy);
+
+    // Build cookie database store (in-memory; swap to RelationalDatabaseStore
+    // with @ohos.data.relationalStore for full cross-restart persistence)
+    const cookieDbStore = new MemoryDatabaseStore();
+
+    // Build HTTP engine backed by @ohos.net.http
+    const httpEngine = createOhosHttpEngine(http);
+
+    // Run the full global initialization sequence
+    const status = AppInitializer.initialize(ctxPaths, fsOps, prefStore, cookieDbStore, httpEngine);
+
+    if (!status.storage) {
+      // Storage init failed — log or handle gracefully
     }
   }
 

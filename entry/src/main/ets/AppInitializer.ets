@@ -9,16 +9,29 @@
  */
 
 import { SettingsService } from './service/SettingsService.ets';
+import { AppConfig } from './AppConfig.ets';
+import type { AppContextPaths } from './AppConfig.ets';
+import { AppStorageManager } from './AppStorageManager.ets';
+import { FileShareHelper } from './FileShareHelper.ets';
+import type { FsOps } from './util/FileUtils.ets';
+import type { ShareFsOps } from './FileShareHelper.ets';
+import type { PreferencesStore } from './preferences/PreferencesStore.ets';
+import { EhHttpClient } from './client/EhHttpClient.ets';
+import { SignInController } from './client/SignInController.ets';
+import { EhSignIn } from './client/EhSignIn.ets';
+import type { DatabaseStore } from './database/DatabaseStore.ets';
+import type { HttpEngine } from './network/HttpClient.ets';
 
 /**
  * AppInitializer — centralised application bootstrap logic.
  *
  * Equivalent to Android's RecordingApplication.onCreate / EhApplication.
  * Performs all global initialisation in a deterministic order:
- *   1. Settings / Preferences
- *   2. Database (EhDB)
- *   3. Sign-in state (SignInController)
- *   4. Security guard
+ *   1. File storage (AppStorageManager, AppConfig, FileShareHelper)
+ *   2. Settings / Preferences
+ *   3. Database (EhDB)
+ *   4. Sign-in state (SignInController)
+ *   5. Security guard
  *
  * Called once from EntryAbility.onCreate.
  *
@@ -30,6 +43,7 @@ import { SettingsService } from './service/SettingsService.ets';
 
 /** Initialization status for diagnostics. */
 export interface InitStatus {
+  storage: boolean;
   settings: boolean;
   database: boolean;
   signIn: boolean;
@@ -42,10 +56,23 @@ export class AppInitializer {
   /**
    * Run the full application initialisation sequence.
    * Safe to call multiple times — subsequent calls are no-ops.
+   *
+   * @param ctxPaths    Optional platform context paths (for file storage init).
+   * @param fs          Optional filesystem adapter (for file storage init).
+   * @param prefStore   Optional PreferencesStore for Settings persistence.
+   * @param cookieDbStore Optional DatabaseStore for cookie persistence.
+   * @param httpEngine  Optional HttpEngine for HTTP transport.
    */
-  static initialize(): InitStatus {
+  static initialize(
+    ctxPaths?: AppContextPaths,
+    fs?: FsOps,
+    prefStore?: PreferencesStore,
+    cookieDbStore?: DatabaseStore,
+    httpEngine?: HttpEngine,
+  ): InitStatus {
     if (AppInitializer.initialized) {
       return {
+        storage: true,
         settings: true,
         database: true,
         signIn: true,
@@ -54,42 +81,64 @@ export class AppInitializer {
     }
 
     const status: InitStatus = {
+      storage: false,
       settings: false,
       database: false,
       signIn: false,
       security: false,
     };
 
-    // 1. Settings: reset to defaults (production will load from Preferences)
+    // 1. File storage: AppStorageManager, AppConfig, FileShareHelper
     try {
-      // In production, this would be:
-      //   SettingsService.initialize(preferencesStore)
-      // For now, defaults are already set in SettingsService statics.
+      if (ctxPaths && fs) {
+        AppStorageManager.initialize(ctxPaths, fs);
+        AppConfig.initialize(ctxPaths, fs);
+        // If fs supports directory listing, also init FileShareHelper
+        if ('readdirSync' in fs && 'copyFileSync' in fs) {
+          FileShareHelper.initialize(fs as ShareFsOps);
+        }
+      }
+      status.storage = true;
+    } catch {
+      status.storage = false;
+    }
+
+    // 2. Settings: backed by PreferencesStore.
+    try {
+      if (prefStore) {
+        SettingsService.initialize(prefStore);
+      }
       status.settings = true;
     } catch {
       status.settings = false;
     }
 
-    // 2. Database
+    // 3. Database & HTTP client with cookie persistence
     try {
-      // In production:
-      //   EhDB instance = new DatabaseStoreEhDB(context)
-      //   Register globally or via DI
+      if (cookieDbStore && httpEngine) {
+        EhHttpClient.initialize(cookieDbStore, httpEngine);
+      }
       status.database = true;
     } catch {
       status.database = false;
     }
 
-    // 3. Sign-in controller
+    // 4. Sign-in controller (shares the same HttpClient + CookieStore)
     try {
-      // In production:
-      //   SignInController.initialize(httpClient, cookiePersistence)
+      if (EhHttpClient.isInitialized()) {
+        const httpClient = EhHttpClient.getHttpClient();
+        const cookieStore = EhHttpClient.getCookieStore();
+        SignInController.initializeWith(
+          new EhSignIn(httpClient, cookieStore),
+          cookieStore,
+        );
+      }
       status.signIn = true;
     } catch {
       status.signIn = false;
     }
 
-    // 4. Security
+    // 5. Security
     try {
       // In production:
       //   SecurityGuard instance = new SecurityGuard(secureStorage)
@@ -111,7 +160,12 @@ export class AppInitializer {
   /** Reset initialization state (for testing). */
   static reset(): void {
     AppInitializer.initialized = false;
+    AppStorageManager.reset();
+    AppConfig.reset();
+    FileShareHelper.reset();
     SettingsService.resetDefaults();
+    EhHttpClient.reset();
+    SignInController.reset();
   }
 
   /**
@@ -119,6 +173,7 @@ export class AppInitializer {
    */
   static getDiagnostics(): Record<string, string> {
     return {
+      storageInitialized: String(AppStorageManager.isInitialized()),
       gallerySite: String(SettingsService.getGallerySite()),
       needSignIn: String(SettingsService.getNeedSignIn()),
       securityEnabled: String(SettingsService.getEnabledSecurity()),
