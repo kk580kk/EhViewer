@@ -748,7 +748,7 @@ public class EhEngine {
 
         Matcher m = PATTERN_NEED_HATH_CLIENT.matcher(body);
         if (m.find()) {
-            throw new NoHAtHClientException("No H@H client");
+            throw new NoHAtHClientException();
         }
 
         return null;

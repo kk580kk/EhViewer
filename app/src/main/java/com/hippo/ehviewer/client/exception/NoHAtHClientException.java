@@ -16,7 +16,14 @@
 
 package com.hippo.ehviewer.client.exception;
 
+/**
+ * Thrown when the site requires a H@H (Hitomi at Home) client but none is available.
+ */
 public class NoHAtHClientException extends EhException {
+
+    public NoHAtHClientException() {
+        super("No H@H client");
+    }
 
     public NoHAtHClientException(String detailMessage) {
         super(detailMessage);
