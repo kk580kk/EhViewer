@@ -56,6 +56,8 @@ export const DownloadAction = {
   STOP_RANGE: 'stop_range',
   STOP_CURRENT: 'stop_current',
   STOP_ALL: 'stop_all',
+  PAUSE: 'pause',
+  RESUME: 'resume',
   DELETE: 'delete',
   DELETE_RANGE: 'delete_range',
   CLEAR: 'clear',
@@ -198,6 +200,16 @@ export class DownloadService implements DownloadListener {
       case DownloadAction.STOP_ALL:
         this.downloadManager.stopAllDownload();
         break;
+      case DownloadAction.PAUSE:
+        if (params?.gid !== undefined) {
+          this.downloadManager.pauseDownload(params.gid);
+        }
+        break;
+      case DownloadAction.RESUME:
+        if (params?.gid !== undefined) {
+          this.downloadManager.resumeDownload(params.gid);
+        }
+        break;
       case DownloadAction.DELETE:
         if (params?.gid !== undefined) {
           this.downloadManager.deleteDownload(params.gid);
@@ -226,6 +238,20 @@ export class DownloadService implements DownloadListener {
     const title = this.getSuitableTitle(info);
     if (this.notification !== null) {
       this.notification.showDownloading(title, '', 0, 0);
+    }
+  }
+
+  onPause(info: DownloadInfo): void {
+    if (this.notification !== null) {
+      const title = this.getSuitableTitle(info);
+      this.notification.showDownloading(title, 'Paused', info.finished, info.total);
+    }
+  }
+
+  onResume(info: DownloadInfo): void {
+    if (this.notification !== null) {
+      const title = this.getSuitableTitle(info);
+      this.notification.showDownloading(title, 'Resuming...', info.finished, info.total);
     }
   }
 

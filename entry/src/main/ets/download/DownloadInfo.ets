@@ -25,6 +25,7 @@ export class DownloadInfo extends GalleryInfo {
   static readonly STATE_DOWNLOAD: number = 2;
   static readonly STATE_FINISH: number = 3;
   static readonly STATE_FAILED: number = 4;
+  static readonly STATE_PAUSED: number = 5;
 
   // --- Persisted fields ---
   state: number = DownloadInfo.STATE_NONE;
@@ -60,9 +61,11 @@ export class DownloadInfo extends GalleryInfo {
   }
 
   /**
-   * Returns true if this download is currently active (waiting or downloading).
+   * Returns true if this download is currently active (waiting, downloading, or paused).
    */
   isActive(): boolean {
-    return this.state === DownloadInfo.STATE_WAIT || this.state === DownloadInfo.STATE_DOWNLOAD;
+    return this.state === DownloadInfo.STATE_WAIT ||
+           this.state === DownloadInfo.STATE_DOWNLOAD ||
+           this.state === DownloadInfo.STATE_PAUSED;
   }
 }

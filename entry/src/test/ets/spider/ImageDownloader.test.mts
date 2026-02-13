@@ -483,6 +483,151 @@ describe('ImageDownloader', () => {
     });
   });
 
+  // ---- Pause / Resume ----
+
+  describe('pause and resume', () => {
+    it('pauses download and resumes from same position', async () => {
+      const { downloader } = setup(5);
+
+      // Pause after page 1 completes
+      let pageCount = 0;
+      downloader.addListener({
+        onPageStart(): void {},
+        onPageSuccess(): void {
+          pageCount++;
+          if (pageCount === 2) downloader.pause();
+        },
+        onPageFailure(): void {},
+        onFinish(): void {},
+      });
+
+      // Start download in background — it will pause after page 1
+      const downloadPromise = downloader.downloadAll();
+
+      // Wait for pause to take effect
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      assert.ok(downloader.isPaused());
+      assert.strictEqual(downloader.getFinished(), 2); // pages 0, 1 done
+
+      // Resume
+      downloader.resume();
+      await downloadPromise;
+
+      assert.strictEqual(downloader.isPaused(), false);
+      assert.strictEqual(downloader.getFinished(), 5);
+      assert.strictEqual(spy.finishCalls.length, 1);
+      assert.deepStrictEqual(spy.finishCalls[0], { finished: 5, downloaded: 5, total: 5 });
+    });
+
+    it('pause before downloadAll waits until resume', async () => {
+      const { downloader } = setup(3);
+      downloader.pause();
+
+      const downloadPromise = downloader.downloadAll();
+
+      // Wait a bit — should not have started
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      assert.strictEqual(downloader.getFinished(), 0);
+      assert.ok(downloader.isPaused());
+
+      // Resume and wait for completion
+      downloader.resume();
+      await downloadPromise;
+
+      assert.strictEqual(downloader.getFinished(), 3);
+    });
+
+    it('cancel while paused should exit', async () => {
+      const { downloader } = setup(5);
+      downloader.pause();
+
+      const downloadPromise = downloader.downloadAll();
+
+      // Wait then cancel
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      assert.ok(downloader.isPaused());
+      downloader.cancel();
+
+      await downloadPromise;
+
+      assert.ok(downloader.isCancelled());
+      assert.strictEqual(downloader.getFinished(), 0);
+      assert.strictEqual(spy.finishCalls.length, 1);
+    });
+
+    it('notifies onPaused listener', async () => {
+      const { downloader } = setup(3);
+
+      let pausedCalls: { finished: number; downloaded: number; total: number }[] = [];
+      downloader.addListener({
+        onPageStart(): void {},
+        onPageSuccess(): void {
+          downloader.pause();
+        },
+        onPageFailure(): void {},
+        onPaused(finished: number, downloaded: number, total: number): void {
+          pausedCalls.push({ finished, downloaded, total });
+        },
+        onFinish(): void {},
+      });
+
+      const downloadPromise = downloader.downloadAll();
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      // Page 0 succeeded and paused before page 1
+      assert.strictEqual(pausedCalls.length, 1);
+      assert.strictEqual(pausedCalls[0].finished, 1);
+
+      downloader.resume();
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      // Page 1 succeeded and paused before page 2
+      assert.strictEqual(pausedCalls.length, 2);
+      assert.strictEqual(pausedCalls[1].finished, 2);
+
+      // Resume — page 2 (last page) downloads and loop ends
+      downloader.resume();
+      await downloadPromise;
+
+      // Only 2 pause notifications (after page 0 and page 1)
+      // Page 2 is the last page — no more pages to pause before
+      assert.strictEqual(pausedCalls.length, 2);
+      assert.strictEqual(downloader.getFinished(), 3);
+    });
+
+    it('resume is no-op when not paused', () => {
+      const { downloader } = setup(3);
+      // Should not throw
+      downloader.resume();
+      assert.strictEqual(downloader.isPaused(), false);
+    });
+
+    it('multiple pauses are idempotent', async () => {
+      const { downloader } = setup(3);
+
+      let pageCount = 0;
+      downloader.addListener({
+        onPageStart(): void {},
+        onPageSuccess(): void {
+          pageCount++;
+          if (pageCount === 1) {
+            downloader.pause();
+            downloader.pause(); // double pause
+          }
+        },
+        onPageFailure(): void {},
+        onFinish(): void {},
+      });
+
+      const downloadPromise = downloader.downloadAll();
+      await new Promise<void>(resolve => setTimeout(resolve, 50));
+      assert.ok(downloader.isPaused());
+
+      downloader.resume();
+      await downloadPromise;
+
+      assert.strictEqual(downloader.getFinished(), 3);
+    });
+  });
+
   // ---- Edge cases ----
 
   describe('edge cases', () => {

@@ -57,9 +57,13 @@ class SpyInfoListener implements DownloadInfoListener {
 
 class SpyDownloadListener implements DownloadListener {
   startCalls: number[] = [];
+  pauseCalls: number[] = [];
+  resumeCalls: number[] = [];
   finishCalls: number[] = [];
   cancelCalls: number[] = [];
   onStart(info: DownloadInfo): void { this.startCalls.push(info.gid); }
+  onPause(info: DownloadInfo): void { this.pauseCalls.push(info.gid); }
+  onResume(info: DownloadInfo): void { this.resumeCalls.push(info.gid); }
   onFinish(info: DownloadInfo): void { this.finishCalls.push(info.gid); }
   onCancel(info: DownloadInfo): void { this.cancelCalls.push(info.gid); }
 }
@@ -712,6 +716,153 @@ describe('DownloadManager', () => {
       assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
       assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_WAIT);
       assert.strictEqual(mgr.getCurrentTasks().length, 1);
+    });
+  });
+
+  // =========================================================================
+  // pauseDownload / resumeDownload
+  // =========================================================================
+
+  describe('pauseDownload', () => {
+    it('should transition active task from DOWNLOAD to PAUSED', () => {
+      mgr.startDownload(makeGallery(1));
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+
+      mgr.pauseDownload(1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_PAUSED);
+    });
+
+    it('should persist PAUSED state to DB', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      const stored = db.getAllDownloadInfo();
+      assert.strictEqual(stored[0].state, DownloadInfo.STATE_PAUSED);
+    });
+
+    it('should keep task in currentTasks', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      assert.strictEqual(mgr.getCurrentTasks().length, 1);
+      assert.strictEqual(mgr.getCurrentTasks()[0].gid, 1);
+    });
+
+    it('should fire DownloadListener.onPause', () => {
+      const spy = new SpyDownloadListener();
+      mgr.setDownloadListener(spy);
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      assert.deepStrictEqual(spy.pauseCalls, [1]);
+    });
+
+    it('should fire onUpdate for info listeners', () => {
+      const spy = new SpyInfoListener();
+      mgr.addDownloadInfoListener(spy);
+      mgr.startDownload(makeGallery(1));
+      spy.updateCalls = []; // reset
+      mgr.pauseDownload(1);
+      assert.ok(spy.updateCalls.length >= 1);
+      assert.strictEqual(spy.updateCalls[0].gid, 1);
+    });
+
+    it('should call onPauseDownload hook', () => {
+      const paused: number[] = [];
+      mgr.onPauseDownload = (info) => paused.push(info.gid);
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      assert.deepStrictEqual(paused, [1]);
+    });
+
+    it('should be no-op for non-DOWNLOAD state', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      // gid 2 is in WAIT state
+      mgr.pauseDownload(2);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_WAIT);
+    });
+
+    it('should be no-op for unknown gid', () => {
+      mgr.pauseDownload(999); // should not throw
+    });
+  });
+
+  describe('resumeDownload', () => {
+    it('should transition from PAUSED to DOWNLOAD', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_PAUSED);
+
+      mgr.resumeDownload(1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should persist DOWNLOAD state to DB', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      mgr.resumeDownload(1);
+      const stored = db.getAllDownloadInfo();
+      assert.strictEqual(stored[0].state, DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should fire DownloadListener.onResume', () => {
+      const spy = new SpyDownloadListener();
+      mgr.setDownloadListener(spy);
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      mgr.resumeDownload(1);
+      assert.deepStrictEqual(spy.resumeCalls, [1]);
+    });
+
+    it('should call onResumeDownload hook', () => {
+      const resumed: number[] = [];
+      mgr.onResumeDownload = (info) => resumed.push(info.gid);
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      mgr.resumeDownload(1);
+      assert.deepStrictEqual(resumed, [1]);
+    });
+
+    it('should be no-op for non-PAUSED state', () => {
+      mgr.startDownload(makeGallery(1));
+      // gid 1 is in DOWNLOAD state
+      mgr.resumeDownload(1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should be no-op for unknown gid', () => {
+      mgr.resumeDownload(999); // should not throw
+    });
+  });
+
+  describe('pause/resume integration', () => {
+    it('pause and then stop should set state to NONE', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      mgr.stopDownload(1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_NONE);
+      assert.strictEqual(mgr.getCurrentTasks().length, 0);
+    });
+
+    it('stopAllDownload should stop paused tasks', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      mgr.stopAllDownload();
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_NONE);
+      assert.strictEqual(mgr.getCurrentTasks().length, 0);
+    });
+
+    it('paused task should be restorable after app restart', () => {
+      const di = makeDownloadInfo(1, DownloadInfo.STATE_PAUSED);
+      db.putDownloadInfo(di);
+      const rebuilt = new DownloadManager(db);
+      assert.strictEqual(rebuilt.hasRestorable(), true);
+
+      rebuilt.restoreDownloads();
+      assert.strictEqual(rebuilt.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('DownloadInfo.isActive should return true for PAUSED', () => {
+      const info = makeDownloadInfo(1, DownloadInfo.STATE_PAUSED);
+      assert.strictEqual(info.isActive(), true);
     });
   });
 

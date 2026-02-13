@@ -40,6 +40,8 @@ export interface ImageDownloadListener {
   onPageSuccess(index: number, finished: number, downloaded: number, total: number): void;
   /** Called when a page fails. */
   onPageFailure(index: number, error: string, finished: number, downloaded: number, total: number): void;
+  /** Called when the download is paused. */
+  onPaused?(finished: number, downloaded: number, total: number): void;
   /** Called when the entire download completes (all pages attempted). */
   onFinish(finished: number, downloaded: number, total: number): void;
 }
@@ -86,11 +88,15 @@ export class ImageDownloader {
   private readonly maxRetries: number;
 
   private cancelled: boolean = false;
+  private paused: boolean = false;
+  private pauseResolve: (() => void) | null = null;
 
   /** Per-page state tracking. */
   private pageStates: PageState[] = [];
   private finished: number = 0;
   private downloaded: number = 0;
+  /** Index of the next page to download when resuming. */
+  private nextPageIndex: number = 0;
 
   constructor(
     queen: SpiderQueen,
@@ -116,10 +122,34 @@ export class ImageDownloader {
   /** Cancel the ongoing download. Pages already written are kept. */
   cancel(): void {
     this.cancelled = true;
+    // If paused, unblock so the loop can exit
+    if (this.pauseResolve !== null) {
+      this.pauseResolve();
+      this.pauseResolve = null;
+    }
   }
 
   isCancelled(): boolean {
     return this.cancelled;
+  }
+
+  /** Pause the ongoing download. Can be resumed later. */
+  pause(): void {
+    this.paused = true;
+  }
+
+  /** Resume a paused download. */
+  resume(): void {
+    if (!this.paused) return;
+    this.paused = false;
+    if (this.pauseResolve !== null) {
+      this.pauseResolve();
+      this.pauseResolve = null;
+    }
+  }
+
+  isPaused(): boolean {
+    return this.paused;
   }
 
   getFinished(): number {
@@ -138,6 +168,7 @@ export class ImageDownloader {
    * Download all pages sequentially from 0 to total-1.
    * Skips pages already present in SpiderDen.
    * Updates progress after each page.
+   * Supports pause/resume: when paused, the loop awaits until resumed or cancelled.
    */
   async downloadAll(): Promise<void> {
     const total = this.queen.getSpiderInfo().pages;
@@ -149,19 +180,34 @@ export class ImageDownloader {
     // Ensure SpiderDen is in download mode
     this.den.setMode(MODE_DOWNLOAD);
 
-    // Init state tracking
-    this.pageStates = new Array<PageState>(total).fill(PageState.NONE);
-    this.finished = 0;
-    this.downloaded = 0;
+    // Init state tracking only on first call (not on resume)
+    if (this.pageStates.length === 0) {
+      this.pageStates = new Array<PageState>(total).fill(PageState.NONE);
+      this.finished = 0;
+      this.downloaded = 0;
+      this.nextPageIndex = 0;
+    }
 
-    for (let index = 0; index < total; index++) {
+    for (let index = this.nextPageIndex; index < total; index++) {
+      // Wait while paused
+      if (this.paused && !this.cancelled) {
+        this.notifyPaused(this.finished, this.downloaded, total);
+        await new Promise<void>(resolve => {
+          this.pauseResolve = resolve;
+        });
+      }
+
       if (this.cancelled) break;
 
+      this.nextPageIndex = index + 1;
+
       // Skip if already downloaded
-      if (this.den.containImage(index)) {
-        this.pageStates[index] = PageState.FINISHED;
-        this.finished++;
-        this.downloaded++;
+      if (this.den.containImage(index) || this.pageStates[index] === PageState.FINISHED) {
+        if (this.pageStates[index] !== PageState.FINISHED) {
+          this.pageStates[index] = PageState.FINISHED;
+          this.finished++;
+          this.downloaded++;
+        }
         this.notifyPageSuccess(index, this.finished, this.downloaded, total);
         continue;
       }
@@ -253,6 +299,14 @@ export class ImageDownloader {
   private notifyPageFailure(index: number, error: string, finished: number, downloaded: number, total: number): void {
     for (const l of this.listeners) {
       l.onPageFailure(index, error, finished, downloaded, total);
+    }
+  }
+
+  private notifyPaused(finished: number, downloaded: number, total: number): void {
+    for (const l of this.listeners) {
+      if (l.onPaused) {
+        l.onPaused(finished, downloaded, total);
+      }
     }
   }
 

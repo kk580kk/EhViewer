@@ -36,6 +36,8 @@ export interface DownloadInfoListener {
  */
 export interface DownloadListener {
   onStart(info: DownloadInfo): void;
+  onPause(info: DownloadInfo): void;
+  onResume(info: DownloadInfo): void;
   onFinish(info: DownloadInfo): void;
   onCancel(info: DownloadInfo): void;
 }
@@ -88,6 +90,18 @@ export class DownloadManager {
    * Production code will wire this to SpiderQueen; tests leave it null.
    */
   onStartDownload: ((info: DownloadInfo) => void) | null = null;
+
+  /**
+   * Optional hook called when a task is paused.
+   * Production code will wire this to ImageDownloader.pause().
+   */
+  onPauseDownload: ((info: DownloadInfo) => void) | null = null;
+
+  /**
+   * Optional hook called when a paused task is resumed.
+   * Production code will wire this to ImageDownloader.resume().
+   */
+  onResumeDownload: ((info: DownloadInfo) => void) | null = null;
 
   constructor(db: DownloadDB) {
     this.db = db;
@@ -175,11 +189,13 @@ export class DownloadManager {
 
   /**
    * Check if there are downloads that were interrupted by app restart
-   * (persisted in STATE_WAIT or STATE_DOWNLOAD).
+   * (persisted in STATE_WAIT, STATE_DOWNLOAD, or STATE_PAUSED).
    */
   hasRestorable(): boolean {
     for (const info of this.allInfoList) {
-      if (info.state === DownloadInfo.STATE_WAIT || info.state === DownloadInfo.STATE_DOWNLOAD) {
+      if (info.state === DownloadInfo.STATE_WAIT ||
+          info.state === DownloadInfo.STATE_DOWNLOAD ||
+          info.state === DownloadInfo.STATE_PAUSED) {
         return true;
       }
     }
@@ -188,12 +204,14 @@ export class DownloadManager {
 
   /**
    * Restore downloads that were interrupted by app restart.
-   * Re-queues items persisted in STATE_WAIT or STATE_DOWNLOAD.
+   * Re-queues items persisted in STATE_WAIT, STATE_DOWNLOAD, or STATE_PAUSED.
    */
   restoreDownloads(): void {
     let updated = false;
     for (const info of this.allInfoList) {
-      if (info.state === DownloadInfo.STATE_WAIT || info.state === DownloadInfo.STATE_DOWNLOAD) {
+      if (info.state === DownloadInfo.STATE_WAIT ||
+          info.state === DownloadInfo.STATE_DOWNLOAD ||
+          info.state === DownloadInfo.STATE_PAUSED) {
         updated = true;
         info.state = DownloadInfo.STATE_WAIT;
         this.waitList.push(info);
@@ -479,7 +497,7 @@ export class DownloadManager {
     }
     this.waitList.length = 0;
 
-    // Stop all active tasks
+    // Stop all active tasks (including paused)
     const activeCopy = [...this.currentTasks];
     for (const info of activeCopy) {
       this.stopActiveDownloadInternal(info.gid);
@@ -488,6 +506,65 @@ export class DownloadManager {
     for (const l of this.downloadInfoListeners) {
       l.onUpdateAll();
     }
+  }
+
+  /**
+   * Pause an active download. The task remains in currentTasks but its state
+   * changes to STATE_PAUSED. The actual ImageDownloader is paused via the
+   * onPauseDownload hook.
+   */
+  pauseDownload(gid: number): void {
+    const info = this.currentTasks.find(t => t.gid === gid);
+    if (info === undefined || info.state !== DownloadInfo.STATE_DOWNLOAD) return;
+
+    info.state = DownloadInfo.STATE_PAUSED;
+    this.db.putDownloadInfo(info);
+
+    if (this.onPauseDownload !== null) {
+      this.onPauseDownload(info);
+    }
+
+    if (this.downloadListener !== null) {
+      this.downloadListener.onPause(info);
+    }
+
+    const list = this.getInfoListForLabel(info.label);
+    if (list !== null) {
+      for (const l of this.downloadInfoListeners) {
+        l.onUpdate(info, list);
+      }
+    }
+
+    this.notifyProgressCallbacks(info, true);
+  }
+
+  /**
+   * Resume a paused download. The task transitions from STATE_PAUSED back
+   * to STATE_DOWNLOAD.
+   */
+  resumeDownload(gid: number): void {
+    const info = this.currentTasks.find(t => t.gid === gid);
+    if (info === undefined || info.state !== DownloadInfo.STATE_PAUSED) return;
+
+    info.state = DownloadInfo.STATE_DOWNLOAD;
+    this.db.putDownloadInfo(info);
+
+    if (this.onResumeDownload !== null) {
+      this.onResumeDownload(info);
+    }
+
+    if (this.downloadListener !== null) {
+      this.downloadListener.onResume(info);
+    }
+
+    const list = this.getInfoListForLabel(info.label);
+    if (list !== null) {
+      for (const l of this.downloadInfoListeners) {
+        l.onUpdate(info, list);
+      }
+    }
+
+    this.notifyProgressCallbacks(info, true);
   }
 
   private stopDownloadInternal(gid: number): DownloadInfo | null {
@@ -636,7 +713,8 @@ export class DownloadManager {
 
       // Reset active states
       if (info.state === DownloadInfo.STATE_WAIT ||
-          info.state === DownloadInfo.STATE_DOWNLOAD) {
+          info.state === DownloadInfo.STATE_DOWNLOAD ||
+          info.state === DownloadInfo.STATE_PAUSED) {
         info.state = DownloadInfo.STATE_NONE;
       }
 

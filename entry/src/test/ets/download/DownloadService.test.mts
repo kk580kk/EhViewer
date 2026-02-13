@@ -196,6 +196,27 @@ describe('DownloadService', () => {
       assert.strictEqual(mgr.isIdle(), true);
     });
 
+    it('PAUSE should pause a downloading task', () => {
+      mgr.startDownload(makeGallery(1));
+      service.handleAction(DownloadAction.PAUSE, { gid: 1 });
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_PAUSED);
+    });
+
+    it('RESUME should resume a paused task', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.pauseDownload(1);
+      service.handleAction(DownloadAction.RESUME, { gid: 1 });
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('PAUSE should show paused notification', () => {
+      mgr.startDownload(makeGallery(1, 'Paused Gallery'));
+      mgr.pauseDownload(1);
+      const last = notif.downloadingCalls[notif.downloadingCalls.length - 1];
+      assert.strictEqual(last.title, 'Paused Gallery');
+      assert.ok(last.text.includes('Paused'));
+    });
+
     it('DELETE should delete a download', () => {
       mgr.startDownload(makeGallery(1));
       service.handleAction(DownloadAction.DELETE, { gid: 1 });
