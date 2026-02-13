@@ -169,6 +169,42 @@ export class DownloadManager {
     return this.currentTask === null && this.waitList.length === 0;
   }
 
+  /**
+   * Check if there are downloads that were interrupted by app restart
+   * (persisted in STATE_WAIT or STATE_DOWNLOAD).
+   */
+  hasRestorable(): boolean {
+    for (const info of this.allInfoList) {
+      if (info.state === DownloadInfo.STATE_WAIT || info.state === DownloadInfo.STATE_DOWNLOAD) {
+        return true;
+      }
+    }
+    return false;
+  }
+
+  /**
+   * Restore downloads that were interrupted by app restart.
+   * Re-queues items persisted in STATE_WAIT or STATE_DOWNLOAD.
+   */
+  restoreDownloads(): void {
+    let updated = false;
+    for (const info of this.allInfoList) {
+      if (info.state === DownloadInfo.STATE_WAIT || info.state === DownloadInfo.STATE_DOWNLOAD) {
+        updated = true;
+        info.state = DownloadInfo.STATE_WAIT;
+        this.waitList.push(info);
+        this.db.putDownloadInfo(info);
+      }
+    }
+
+    if (updated) {
+      for (const l of this.downloadInfoListeners) {
+        l.onUpdateAll();
+      }
+      this.ensureDownload();
+    }
+  }
+
   getCurrentTask(): DownloadInfo | null {
     return this.currentTask;
   }

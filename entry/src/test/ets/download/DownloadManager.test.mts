@@ -667,4 +667,155 @@ describe('DownloadManager', () => {
       assert.strictEqual(mgr.getLabelList().length, 2);
     });
   });
+
+  // =========================================================================
+  // hasRestorable / restoreDownloads
+  // =========================================================================
+
+  describe('hasRestorable', () => {
+    it('should return true when WAIT items exist in DB', () => {
+      const di = makeDownloadInfo(1, DownloadInfo.STATE_WAIT);
+      db.putDownloadInfo(di);
+      const rebuilt = new DownloadManager(db);
+      assert.strictEqual(rebuilt.hasRestorable(), true);
+    });
+
+    it('should return true when DOWNLOAD items exist in DB', () => {
+      const di = makeDownloadInfo(1, DownloadInfo.STATE_DOWNLOAD);
+      db.putDownloadInfo(di);
+      const rebuilt = new DownloadManager(db);
+      assert.strictEqual(rebuilt.hasRestorable(), true);
+    });
+
+    it('should return false when only NONE/FINISH/FAILED items exist', () => {
+      db.putDownloadInfo(makeDownloadInfo(1, DownloadInfo.STATE_NONE));
+      db.putDownloadInfo(makeDownloadInfo(2, DownloadInfo.STATE_FINISH));
+      db.putDownloadInfo(makeDownloadInfo(3, DownloadInfo.STATE_FAILED));
+      const rebuilt = new DownloadManager(db);
+      assert.strictEqual(rebuilt.hasRestorable(), false);
+    });
+
+    it('should return false when empty', () => {
+      assert.strictEqual(mgr.hasRestorable(), false);
+    });
+  });
+
+  describe('restoreDownloads', () => {
+    it('should re-queue WAIT items from DB', () => {
+      const di = makeDownloadInfo(1, DownloadInfo.STATE_WAIT);
+      db.putDownloadInfo(di);
+      const rebuilt = new DownloadManager(db);
+
+      rebuilt.restoreDownloads();
+
+      // Item should now be DOWNLOAD (picked up by ensureDownload since nothing else running)
+      assert.strictEqual(rebuilt.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(rebuilt.getCurrentTask()!.gid, 1);
+    });
+
+    it('should re-queue DOWNLOAD items from DB', () => {
+      const di = makeDownloadInfo(1, DownloadInfo.STATE_DOWNLOAD);
+      db.putDownloadInfo(di);
+      const rebuilt = new DownloadManager(db);
+
+      rebuilt.restoreDownloads();
+
+      assert.strictEqual(rebuilt.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(rebuilt.getCurrentTask()!.gid, 1);
+    });
+
+    it('should restore multiple interrupted items in order', () => {
+      const di1 = makeDownloadInfo(1, DownloadInfo.STATE_WAIT);
+      const di2 = makeDownloadInfo(2, DownloadInfo.STATE_DOWNLOAD);
+      const di3 = makeDownloadInfo(3, DownloadInfo.STATE_FINISH);
+      db.putDownloadInfo(di1);
+      db.putDownloadInfo(di2);
+      db.putDownloadInfo(di3);
+
+      const rebuilt = new DownloadManager(db);
+      rebuilt.restoreDownloads();
+
+      // One should be downloading, one waiting
+      const states = [rebuilt.getDownloadState(1), rebuilt.getDownloadState(2)];
+      assert.ok(states.includes(DownloadInfo.STATE_DOWNLOAD));
+      assert.ok(states.includes(DownloadInfo.STATE_WAIT));
+      // Finished item should be untouched
+      assert.strictEqual(rebuilt.getDownloadState(3), DownloadInfo.STATE_FINISH);
+    });
+
+    it('should not affect NONE/FINISH/FAILED items', () => {
+      db.putDownloadInfo(makeDownloadInfo(1, DownloadInfo.STATE_NONE));
+      db.putDownloadInfo(makeDownloadInfo(2, DownloadInfo.STATE_FINISH));
+      db.putDownloadInfo(makeDownloadInfo(3, DownloadInfo.STATE_FAILED));
+
+      const rebuilt = new DownloadManager(db);
+      rebuilt.restoreDownloads();
+
+      assert.strictEqual(rebuilt.getDownloadState(1), DownloadInfo.STATE_NONE);
+      assert.strictEqual(rebuilt.getDownloadState(2), DownloadInfo.STATE_FINISH);
+      assert.strictEqual(rebuilt.getDownloadState(3), DownloadInfo.STATE_FAILED);
+      assert.strictEqual(rebuilt.getCurrentTask(), null);
+    });
+
+    it('should be a no-op when nothing to restore', () => {
+      const spy = new SpyInfoListener();
+      mgr.addDownloadInfoListener(spy);
+      mgr.restoreDownloads();
+      assert.strictEqual(spy.updateAllCount, 0);
+      assert.strictEqual(mgr.getCurrentTask(), null);
+    });
+
+    it('should fire onUpdateAll listener', () => {
+      db.putDownloadInfo(makeDownloadInfo(1, DownloadInfo.STATE_WAIT));
+      const rebuilt = new DownloadManager(db);
+      const spy = new SpyInfoListener();
+      rebuilt.addDownloadInfoListener(spy);
+
+      rebuilt.restoreDownloads();
+
+      assert.strictEqual(spy.updateAllCount, 1);
+    });
+
+    it('should persist restored state to DB', () => {
+      const di = makeDownloadInfo(1, DownloadInfo.STATE_DOWNLOAD);
+      db.putDownloadInfo(di);
+      const rebuilt = new DownloadManager(db);
+
+      rebuilt.restoreDownloads();
+
+      // The DB should reflect the new state (WAIT -> picked up as DOWNLOAD)
+      const stored = db.getAllDownloadInfo();
+      assert.strictEqual(stored.length, 1);
+      assert.strictEqual(stored[0].state, DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should fire onStartDownload hook for restored task', () => {
+      db.putDownloadInfo(makeDownloadInfo(1, DownloadInfo.STATE_WAIT));
+      const rebuilt = new DownloadManager(db);
+      const started: number[] = [];
+      rebuilt.onStartDownload = (info) => started.push(info.gid);
+
+      rebuilt.restoreDownloads();
+
+      assert.deepStrictEqual(started, [1]);
+    });
+
+    it('should work correctly when current task already exists', () => {
+      const rebuilt = new DownloadManager(db);
+      rebuilt.startDownload(makeGallery(1)); // gid=1 is now DOWNLOAD
+
+      // Simulate: DB had an interrupted item from a previous session
+      // We manually insert into DB and create a new manager to simulate restart
+      db.putDownloadInfo(makeDownloadInfo(2, DownloadInfo.STATE_WAIT));
+      const rebuilt2 = new DownloadManager(db);
+
+      // Start gid=1 first to occupy the slot
+      rebuilt2.startDownload(makeGallery(10));
+      rebuilt2.restoreDownloads();
+
+      // gid=2 should be in WAIT (behind gid=10 which is downloading)
+      assert.strictEqual(rebuilt2.getDownloadState(2), DownloadInfo.STATE_WAIT);
+      assert.strictEqual(rebuilt2.getCurrentTask()!.gid, 10);
+    });
+  });
 });
