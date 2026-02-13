@@ -18,6 +18,8 @@ package com.hippo.ehviewer.client.parser;
 
 import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.hippo.ehviewer.GetText;
+import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.EhUrl;
 import com.hippo.ehviewer.client.EhUtils;
@@ -86,11 +88,11 @@ public class GalleryDetailParser {
 
     public static GalleryDetail parse(String body) throws EhException {
         if (body.contains(OFFENSIVE_STRING)) {
-            throw new OffensiveException();
+            throw new OffensiveException(GetText.getString(R.string.error_offensive_content));
         }
 
         if (body.contains(PINING_STRING)) {
-            throw new PiningException();
+            throw new PiningException(GetText.getString(R.string.error_pining_content));
         }
 
         // Error info

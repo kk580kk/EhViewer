@@ -16,9 +16,16 @@
 
 package com.hippo.ehviewer.client.exception;
 
+/**
+ * 封禁异常。当页面返回 "pining for the fjords" 提示（画廊已下架/不可用）时抛出。
+ */
 public class PiningException extends EhException {
 
     public PiningException() {
         super("pining for the fjords");
+    }
+
+    public PiningException(String message) {
+        super(message);
     }
 }
