@@ -12,8 +12,10 @@ import { EhEngine } from './EhEngine.ets';
 import { EhSignIn } from './EhSignIn.ets';
 import { EhEngineGalleryListFetcher } from './EhEngineGalleryListFetcher.ets';
 import { EhEngineGalleryDetailFetcher } from './EhEngineGalleryDetailFetcher.ets';
+import { EhEngineGalleryPageFetcher } from './EhEngineGalleryPageFetcher.ets';
 import type { GalleryListFetcher } from '../viewmodel/GalleryListViewModel';
 import type { GalleryDetailFetcher } from '../viewmodel/GalleryDetailViewModel';
+import type { GalleryPageFetcher } from './EhEngineGalleryPageFetcher.ets';
 import type { HttpClient } from '../network/HttpClient.ets';
 import type { EhCookieStore } from './EhCookieStore.ets';
 
@@ -65,6 +67,11 @@ export class EhClient {
   /** Create a GalleryDetailFetcher backed by EhEngine. */
   static galleryDetailFetcher(): GalleryDetailFetcher {
     return new EhEngineGalleryDetailFetcher(EhClient.getEngine());
+  }
+
+  /** Create a GalleryPageFetcher backed by EhEngine (for download/spider). */
+  static galleryPageFetcher(): GalleryPageFetcher {
+    return new EhEngineGalleryPageFetcher(EhClient.getEngine());
   }
 
   /** Reset state (for testing). */
