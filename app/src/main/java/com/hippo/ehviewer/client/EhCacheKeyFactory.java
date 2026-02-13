@@ -18,8 +18,9 @@ package com.hippo.ehviewer.client;
 
 public class EhCacheKeyFactory {
 
+    /** Thumb reuses large preview cache at index 0. */
     public static String getThumbKey(long gid) {
-        return "preview:large:" + gid + ":" + 0; // "thumb:" + gid;
+        return "preview:large:" + gid + ":" + 0;
     }
 
     public static String getNormalPreviewKey(long gid, int index) {
