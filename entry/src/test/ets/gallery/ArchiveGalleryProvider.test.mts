@@ -6,6 +6,7 @@ import type {
   ArchiveReader,
   ArchiveEntry,
   ArchiveFsOps,
+  StreamableArchiveEntry,
 } from '../../../main/ets/gallery/ArchiveGalleryProvider.ets';
 import { STATE_ERROR, STATE_WAIT } from '../../../main/ets/gallery/GalleryProvider.ets';
 import type { GalleryProviderListener } from '../../../main/ets/gallery/GalleryProvider.ets';
@@ -32,6 +33,40 @@ class MemoryArchiveEntry implements ArchiveEntry {
   }
 }
 
+// ---- Streaming ArchiveEntry (yields chunks) ----
+
+class StreamingMemoryEntry implements StreamableArchiveEntry {
+  readonly path: string;
+  readonly uncompressedSize: number;
+  private readonly data: Uint8Array;
+  private readonly chunkSize: number;
+  extractCount = 0;
+
+  constructor(path: string, data: Uint8Array, chunkSize: number = 4) {
+    this.path = path;
+    this.data = data;
+    this.uncompressedSize = data.length;
+    this.chunkSize = chunkSize;
+  }
+
+  async extract(): Promise<Uint8Array> {
+    this.extractCount++;
+    return this.data;
+  }
+
+  async *openStream(): AsyncIterable<Uint8Array> {
+    this.extractCount++;
+    let offset = 0;
+    while (offset < this.data.length) {
+      const end = Math.min(offset + this.chunkSize, this.data.length);
+      yield this.data.slice(offset, end);
+      offset = end;
+      // Yield control to simulate async
+      await new Promise(resolve => setTimeout(resolve, 0));
+    }
+  }
+}
+
 // ---- Failing ArchiveEntry (extract() rejects) ----
 
 class FailingArchiveEntry implements ArchiveEntry {
@@ -44,6 +79,27 @@ class FailingArchiveEntry implements ArchiveEntry {
   }
 
   async extract(): Promise<Uint8Array> {
+    throw new Error(this.errorMsg);
+  }
+}
+
+// ---- Failing StreamableArchiveEntry (openStream() throws) ----
+
+class FailingStreamableEntry implements StreamableArchiveEntry {
+  readonly path: string;
+  readonly uncompressedSize = 100;
+  private readonly errorMsg: string;
+
+  constructor(path: string, errorMsg: string) {
+    this.path = path;
+    this.errorMsg = errorMsg;
+  }
+
+  async extract(): Promise<Uint8Array> {
+    throw new Error(this.errorMsg);
+  }
+
+  async *openStream(): AsyncIterable<Uint8Array> {
     throw new Error(this.errorMsg);
   }
 }
@@ -209,7 +265,7 @@ describe('ArchiveGalleryProvider', () => {
     assert.strictEqual(listener.dataChangedCount, 1);
   });
 
-  // ---- Requesting pages ----
+  // ---- Requesting pages (legacy non-streaming) ----
 
   it('should extract and serve page data on request', async () => {
     const imgData = new Uint8Array([0xFF, 0xD8, 0xFF]);
@@ -309,6 +365,86 @@ describe('ArchiveGalleryProvider', () => {
 
     assert.strictEqual(listener.pageFails.length, 1);
     assert.strictEqual(listener.pageFails[0].error, 'Decompression error');
+  });
+
+  // ---- Streaming extraction ----
+
+  it('should use streaming extraction for StreamableArchiveEntry', async () => {
+    const imgData = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const entry = new StreamingMemoryEntry('photo.jpg', imgData, 3);
+    reader.setEntries([entry]);
+
+    const provider = createProvider();
+    provider.start();
+    await flush();
+
+    provider.request(0);
+    // Multiple flushes for async chunks
+    for (let i = 0; i < 10; i++) await flush();
+
+    assert.strictEqual(listener.pageSucceeds.length, 1);
+    assert.deepStrictEqual(listener.pageSucceeds[0].data, imgData);
+    assert.strictEqual(entry.extractCount, 1); // Used streaming, not full extract
+  });
+
+  it('should report progress during streaming extraction', async () => {
+    const imgData = new Uint8Array([10, 20, 30, 40, 50, 60, 70, 80]);
+    const entry = new StreamingMemoryEntry('photo.jpg', imgData, 2);
+    reader.setEntries([entry]);
+
+    const provider = createProvider();
+    provider.start();
+    await flush();
+
+    provider.request(0);
+    for (let i = 0; i < 10; i++) await flush();
+
+    // Should have progress updates
+    assert.ok(listener.pagePercents.length > 0, 'Expected progress reports');
+    // Last progress should be 1.0 (100%)
+    const lastPercent = listener.pagePercents[listener.pagePercents.length - 1];
+    assert.strictEqual(lastPercent.percent, 1.0);
+    assert.strictEqual(lastPercent.index, 0);
+
+    // Data should be correct
+    assert.strictEqual(listener.pageSucceeds.length, 1);
+    assert.deepStrictEqual(listener.pageSucceeds[0].data, imgData);
+  });
+
+  it('should handle streaming extraction failure', async () => {
+    reader.setEntries([
+      new FailingStreamableEntry('broken.jpg', 'Stream error'),
+    ]);
+
+    const provider = createProvider();
+    provider.start();
+    await flush();
+
+    provider.request(0);
+    await flush();
+
+    assert.strictEqual(listener.pageFails.length, 1);
+    assert.strictEqual(listener.pageFails[0].error, 'Stream error');
+  });
+
+  it('should cancel streaming extraction on cancelRequest', async () => {
+    const imgData = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12]);
+    const entry = new StreamingMemoryEntry('photo.jpg', imgData, 2);
+    reader.setEntries([entry]);
+
+    const provider = createProvider();
+    provider.start();
+    await flush();
+
+    provider.request(0);
+    await flush(); // Start streaming
+
+    // Cancel before completion
+    provider.cancelRequest(0);
+    for (let i = 0; i < 10; i++) await flush();
+
+    // Should NOT get a succeed (cancelled)
+    assert.strictEqual(listener.pageSucceeds.length, 0);
   });
 
   // ---- forceRequest ----
@@ -428,6 +564,26 @@ describe('ArchiveGalleryProvider', () => {
     assert.strictEqual(provider.saveToDir(0, '/output', 'file'), null);
   });
 
+  // ---- Streaming save: cache populated after streaming ----
+
+  it('should cache data from streaming extraction for save()', async () => {
+    const imgData = new Uint8Array([1, 2, 3, 4, 5]);
+    const entry = new StreamingMemoryEntry('photo.jpg', imgData, 2);
+    reader.setEntries([entry]);
+
+    const provider = createProvider();
+    provider.start();
+    await flush();
+
+    provider.request(0);
+    for (let i = 0; i < 10; i++) await flush();
+
+    // After streaming, data should be cached
+    const result = provider.save(0, '/tmp/saved.jpg');
+    assert.ok(result);
+    assert.deepStrictEqual(fs.getFile('/tmp/saved.jpg'), imgData);
+  });
+
   // ---- stop ----
 
   it('should close reader and clear cache on stop', async () => {
@@ -471,6 +627,25 @@ describe('ArchiveGalleryProvider', () => {
     await flush();
 
     // Should NOT get a succeed notification (provider was stopped)
+    assert.strictEqual(listener.pageSucceeds.length, 0);
+  });
+
+  it('should ignore streaming result after stop', async () => {
+    const imgData = new Uint8Array([1, 2, 3, 4, 5, 6, 7, 8]);
+    const entry = new StreamingMemoryEntry('photo.jpg', imgData, 2);
+    reader.setEntries([entry]);
+
+    const provider = createProvider();
+    provider.start();
+    await flush();
+
+    provider.request(0);
+    await flush(); // Start streaming
+
+    provider.stop(); // Stop mid-stream
+    for (let i = 0; i < 10; i++) await flush();
+
+    // Should NOT get succeed
     assert.strictEqual(listener.pageSucceeds.length, 0);
   });
 
