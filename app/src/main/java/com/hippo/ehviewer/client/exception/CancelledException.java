@@ -16,7 +16,13 @@
 
 package com.hippo.ehviewer.client.exception;
 
+/**
+ * Thrown when a request or task is cancelled (e.g. user cancelled or call was cancelled).
+ * Not treated as a failure in {@link com.hippo.ehviewer.client.EhClient.Callback}.
+ */
 public class CancelledException extends Exception {
+
+    private static final long serialVersionUID = 1L;
 
     public CancelledException() {
         super("CANCELED");
