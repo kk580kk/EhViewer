@@ -41,6 +41,10 @@ export struct DownloadsTab {
   onStart: (gid: number) => void = () => {};
   /** Callback when user requests stop. */
   onStop: (gid: number) => void = () => {};
+  /** Callback when user requests pause. */
+  onPause: (gid: number) => void = () => {};
+  /** Callback when user requests resume. */
+  onResume: (gid: number) => void = () => {};
   /** Callback when user selects a label filter. */
   onLabelChange: (label: string | null) => void = () => {};
   /** Callback when user triggers refresh. */
@@ -170,10 +174,28 @@ export struct DownloadsTab {
                 this.onStart(item.gid);
               })
           }
-          if (item.canStop) {
+          if (item.canPause) {
             Text('\u23F8')
               .fontSize(18)
               .fontColor('#FF9800')
+              .padding(4)
+              .onClick(() => {
+                this.onPause(item.gid);
+              })
+          }
+          if (item.canResume) {
+            Text('\u25B6')
+              .fontSize(18)
+              .fontColor('#4CAF50')
+              .padding(4)
+              .onClick(() => {
+                this.onResume(item.gid);
+              })
+          }
+          if (item.canStop) {
+            Text('\u23F9')
+              .fontSize(18)
+              .fontColor('#F44336')
               .padding(4)
               .onClick(() => {
                 this.onStop(item.gid);
@@ -190,13 +212,13 @@ export struct DownloadsTab {
         .width('100%')
         .margin({ top: 4 })
 
-        // Progress bar for downloading state
-        if (item.stateValue === 2 && item.progressPercent >= 0) {
+        // Progress bar for downloading or paused state
+        if ((item.stateValue === 2 || item.stateValue === 5) && item.progressPercent >= 0) {
           Progress({ value: item.progressPercent, total: 100, type: ProgressType.Linear })
             .width('100%')
             .height(4)
             .margin({ top: 4 })
-            .color('#4169E1')
+            .color(item.stateValue === 5 ? '#FF9800' : '#4169E1')
             .backgroundColor('#E0E0E0')
         }
       }
@@ -216,6 +238,7 @@ export struct DownloadsTab {
       case 2: return '#4169E1'; // Downloading
       case 3: return '#4CAF50'; // Finish
       case 4: return '#F44336'; // Failed
+      case 5: return '#FF9800'; // Paused
       default: return '#999999'; // None
     }
   }

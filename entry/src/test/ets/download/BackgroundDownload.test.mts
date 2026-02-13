@@ -167,4 +167,59 @@ describe('Background download integration', () => {
     assert.strictEqual(bgTask.isRunning(), false);
     assert.strictEqual(api.startCalls, 0);
   });
+
+  it('should keep background running when download is paused', async () => {
+    mgr.startDownload(makeGallery(1));
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+
+    mgr.pauseDownload(1);
+    await Promise.resolve();
+    // Paused task stays in currentTasks, so background should remain active
+    assert.strictEqual(bgTask.isRunning(), true);
+    assert.strictEqual(api.stopCalls, 0);
+  });
+
+  it('should keep background running after pause then resume', async () => {
+    mgr.startDownload(makeGallery(1));
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+
+    mgr.pauseDownload(1);
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+
+    mgr.resumeDownload(1);
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+  });
+
+  it('should release background running when paused task is cancelled', async () => {
+    mgr.startDownload(makeGallery(1));
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+
+    mgr.pauseDownload(1);
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+
+    mgr.stopDownload(1);
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), false);
+    assert.ok(api.stopCalls >= 1);
+  });
+
+  it('should release background running when paused task is deleted', async () => {
+    mgr.startDownload(makeGallery(1));
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), true);
+
+    mgr.pauseDownload(1);
+    await Promise.resolve();
+
+    mgr.deleteDownload(1);
+    await Promise.resolve();
+    assert.strictEqual(bgTask.isRunning(), false);
+    assert.ok(api.stopCalls >= 1);
+  });
 });

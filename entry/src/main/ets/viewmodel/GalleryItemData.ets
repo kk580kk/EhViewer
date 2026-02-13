@@ -48,4 +48,6 @@ export class DownloadItemData extends GalleryItemData {
   label: string | null = null;
   canStart: boolean = true;
   canStop: boolean = false;
+  canPause: boolean = false;
+  canResume: boolean = false;
 }

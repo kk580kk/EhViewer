@@ -5,6 +5,8 @@ import { MemoryEhDB } from '../../../main/ets/database/MemoryEhDB.ets';
 import { DownloadManager } from '../../../main/ets/download/DownloadManager.ets';
 import { DownloadInfo } from '../../../main/ets/download/DownloadInfo.ets';
 import { GalleryInfo } from '../../../main/ets/model/GalleryInfo.ets';
+import { SettingsService } from '../../../main/ets/service/SettingsService.ets';
+import { MemoryPreferencesStore } from '../../../main/ets/preferences/MemoryPreferencesStore.ets';
 
 function makeGallery(gid: number, title: string = `Gallery ${gid}`): GalleryInfo {
   const gi = new GalleryInfo();
@@ -30,6 +32,7 @@ describe('DownloadsViewModel', () => {
   let vm: DownloadsViewModel;
 
   beforeEach(() => {
+    SettingsService.initialize(new MemoryPreferencesStore());
     db = new MemoryEhDB();
     vm = new DownloadsViewModel(db);
   });
@@ -219,13 +222,36 @@ describe('DownloadsViewModel', () => {
       assert.strictEqual(DownloadsViewModel.canStart(makeDownload(3, 'X', DownloadInfo.STATE_DOWNLOAD)), false);
       assert.strictEqual(DownloadsViewModel.canStart(makeDownload(4, 'X', DownloadInfo.STATE_WAIT)), false);
       assert.strictEqual(DownloadsViewModel.canStart(makeDownload(5, 'X', DownloadInfo.STATE_FINISH)), false);
+      assert.strictEqual(DownloadsViewModel.canStart(makeDownload(6, 'X', DownloadInfo.STATE_PAUSED)), false);
     });
 
-    it('canStop should be true for WAIT and DOWNLOAD states', () => {
+    it('canStop should be true for WAIT, DOWNLOAD, and PAUSED states', () => {
       assert.strictEqual(DownloadsViewModel.canStop(makeDownload(1, 'X', DownloadInfo.STATE_WAIT)), true);
       assert.strictEqual(DownloadsViewModel.canStop(makeDownload(2, 'X', DownloadInfo.STATE_DOWNLOAD)), true);
-      assert.strictEqual(DownloadsViewModel.canStop(makeDownload(3, 'X', DownloadInfo.STATE_NONE)), false);
-      assert.strictEqual(DownloadsViewModel.canStop(makeDownload(4, 'X', DownloadInfo.STATE_FINISH)), false);
+      assert.strictEqual(DownloadsViewModel.canStop(makeDownload(3, 'X', DownloadInfo.STATE_PAUSED)), true);
+      assert.strictEqual(DownloadsViewModel.canStop(makeDownload(4, 'X', DownloadInfo.STATE_NONE)), false);
+      assert.strictEqual(DownloadsViewModel.canStop(makeDownload(5, 'X', DownloadInfo.STATE_FINISH)), false);
+    });
+
+    it('canPause should be true only for DOWNLOAD state', () => {
+      assert.strictEqual(DownloadsViewModel.canPause(makeDownload(1, 'X', DownloadInfo.STATE_DOWNLOAD)), true);
+      assert.strictEqual(DownloadsViewModel.canPause(makeDownload(2, 'X', DownloadInfo.STATE_WAIT)), false);
+      assert.strictEqual(DownloadsViewModel.canPause(makeDownload(3, 'X', DownloadInfo.STATE_PAUSED)), false);
+      assert.strictEqual(DownloadsViewModel.canPause(makeDownload(4, 'X', DownloadInfo.STATE_NONE)), false);
+      assert.strictEqual(DownloadsViewModel.canPause(makeDownload(5, 'X', DownloadInfo.STATE_FINISH)), false);
+    });
+
+    it('canResume should be true only for PAUSED state', () => {
+      assert.strictEqual(DownloadsViewModel.canResume(makeDownload(1, 'X', DownloadInfo.STATE_PAUSED)), true);
+      assert.strictEqual(DownloadsViewModel.canResume(makeDownload(2, 'X', DownloadInfo.STATE_DOWNLOAD)), false);
+      assert.strictEqual(DownloadsViewModel.canResume(makeDownload(3, 'X', DownloadInfo.STATE_WAIT)), false);
+      assert.strictEqual(DownloadsViewModel.canResume(makeDownload(4, 'X', DownloadInfo.STATE_NONE)), false);
+      assert.strictEqual(DownloadsViewModel.canResume(makeDownload(5, 'X', DownloadInfo.STATE_FINISH)), false);
+    });
+
+    it('getStateText should return Paused for STATE_PAUSED', () => {
+      const paused = makeDownload(1, 'X', DownloadInfo.STATE_PAUSED);
+      assert.strictEqual(DownloadsViewModel.getStateText(paused), 'Paused');
     });
   });
 
@@ -332,6 +358,93 @@ describe('DownloadsViewModel', () => {
 
       vmWithMgr.retryDownload(1);
       // After retry + refresh, state should be updated
+      assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_DOWNLOAD);
+    });
+  });
+
+  describe('pauseDownload (via DownloadManager)', () => {
+    let mgr: DownloadManager;
+    let vmWithMgr: DownloadsViewModel;
+
+    beforeEach(() => {
+      mgr = new DownloadManager(db);
+      vmWithMgr = new DownloadsViewModel(db, mgr);
+    });
+
+    it('should pause an active download', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+
+      const result = vmWithMgr.pauseDownload(1);
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_PAUSED);
+    });
+
+    it('should return false for non-downloading task', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'First'));
+      vmWithMgr.addDownload(makeGallery(2, 'Second'));
+      // gid 2 is in WAIT state
+      assert.strictEqual(vmWithMgr.pauseDownload(2), false);
+    });
+
+    it('should return false for non-existent gid', () => {
+      assert.strictEqual(vmWithMgr.pauseDownload(999), false);
+    });
+
+    it('should return false when DownloadManager is not set', () => {
+      assert.strictEqual(vm.pauseDownload(1), false);
+    });
+
+    it('should refresh items after pause', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      vmWithMgr.load();
+      assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_DOWNLOAD);
+
+      vmWithMgr.pauseDownload(1);
+      assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_PAUSED);
+    });
+  });
+
+  describe('resumeDownload (via DownloadManager)', () => {
+    let mgr: DownloadManager;
+    let vmWithMgr: DownloadsViewModel;
+
+    beforeEach(() => {
+      mgr = new DownloadManager(db);
+      vmWithMgr = new DownloadsViewModel(db, mgr);
+    });
+
+    it('should resume a paused download', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      mgr.pauseDownload(1);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_PAUSED);
+
+      const result = vmWithMgr.resumeDownload(1);
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should return false for non-paused task', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      // gid 1 is in DOWNLOAD state
+      assert.strictEqual(vmWithMgr.resumeDownload(1), false);
+    });
+
+    it('should return false for non-existent gid', () => {
+      assert.strictEqual(vmWithMgr.resumeDownload(999), false);
+    });
+
+    it('should return false when DownloadManager is not set', () => {
+      assert.strictEqual(vm.resumeDownload(1), false);
+    });
+
+    it('should refresh items after resume', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      mgr.pauseDownload(1);
+      vmWithMgr.load();
+      assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_PAUSED);
+
+      vmWithMgr.resumeDownload(1);
       assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_DOWNLOAD);
     });
   });

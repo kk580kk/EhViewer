@@ -165,6 +165,32 @@ export class DownloadsViewModel {
   }
 
   /**
+   * Pause an active download task by gid.
+   * Returns true if the download was paused.
+   */
+  pauseDownload(gid: number): boolean {
+    if (this.downloadManager === null) return false;
+    const info = this.downloadManager.getDownloadInfo(gid);
+    if (info === null || info.state !== DownloadInfo.STATE_DOWNLOAD) return false;
+    this.downloadManager.pauseDownload(gid);
+    this.refresh();
+    return true;
+  }
+
+  /**
+   * Resume a paused download task by gid.
+   * Returns true if the download was resumed.
+   */
+  resumeDownload(gid: number): boolean {
+    if (this.downloadManager === null) return false;
+    const info = this.downloadManager.getDownloadInfo(gid);
+    if (info === null || info.state !== DownloadInfo.STATE_PAUSED) return false;
+    this.downloadManager.resumeDownload(gid);
+    this.refresh();
+    return true;
+  }
+
+  /**
    * Retry a failed download task by gid.
    * Returns true if the download was re-queued.
    */
@@ -206,6 +232,8 @@ export class DownloadsViewModel {
         return 'Waiting';
       case DownloadInfo.STATE_DOWNLOAD:
         return DownloadsViewModel.getProgressText(info);
+      case DownloadInfo.STATE_PAUSED:
+        return 'Paused';
       case DownloadInfo.STATE_FINISH:
         return 'Completed';
       case DownloadInfo.STATE_FAILED:
@@ -231,16 +259,27 @@ export class DownloadsViewModel {
     return Math.round((info.finished / info.total) * 100);
   }
 
-  /** Whether the download can be started/resumed. */
+  /** Whether the download can be started (retry from idle/failed). */
   static canStart(info: DownloadInfo): boolean {
     return info.state === DownloadInfo.STATE_NONE ||
       info.state === DownloadInfo.STATE_FAILED;
   }
 
-  /** Whether the download can be stopped/paused. */
+  /** Whether the download can be stopped/cancelled. */
   static canStop(info: DownloadInfo): boolean {
     return info.state === DownloadInfo.STATE_WAIT ||
-      info.state === DownloadInfo.STATE_DOWNLOAD;
+      info.state === DownloadInfo.STATE_DOWNLOAD ||
+      info.state === DownloadInfo.STATE_PAUSED;
+  }
+
+  /** Whether the download can be paused (only while actively downloading). */
+  static canPause(info: DownloadInfo): boolean {
+    return info.state === DownloadInfo.STATE_DOWNLOAD;
+  }
+
+  /** Whether the download can be resumed (only while paused). */
+  static canResume(info: DownloadInfo): boolean {
+    return info.state === DownloadInfo.STATE_PAUSED;
   }
 
   /** Get display title for a gallery info. */
