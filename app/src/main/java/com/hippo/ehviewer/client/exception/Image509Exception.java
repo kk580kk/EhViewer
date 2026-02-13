@@ -16,6 +16,9 @@
 
 package com.hippo.ehviewer.client.exception;
 
+/**
+ * Exception for image 509 bandwidth limit (e.g. when image URL returns /509.gif or /509s.gif).
+ */
 public class Image509Exception extends EhException {
 
     public Image509Exception() {
