@@ -484,7 +484,7 @@ public class ListUrlBuilder implements Cloneable, Parcelable {
                     String keyword = mKeyword.trim();
                     if (!keyword.isEmpty()) {
                         try {
-                            ub.addQuery("f_search", URLEncoder.encode(mKeyword, "UTF-8"));
+                            ub.addQuery("f_search", URLEncoder.encode(keyword, "UTF-8"));
                         } catch (UnsupportedEncodingException e) {
                             // Empty
                         }
