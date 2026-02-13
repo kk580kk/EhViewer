@@ -42,7 +42,7 @@ public class GalleryCommentList implements Parcelable {
   }
 
   protected GalleryCommentList(Parcel in) {
-    Parcelable[] array = in.readParcelableArray(getClass().getClassLoader());
+    Parcelable[] array = in.readParcelableArray(GalleryComment.class.getClassLoader());
     if (array != null) {
       comments = Arrays.copyOf(array, array.length, GalleryComment[].class);
     } else {
