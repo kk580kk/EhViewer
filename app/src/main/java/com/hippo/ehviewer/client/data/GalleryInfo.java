@@ -24,9 +24,8 @@ import java.util.regex.Pattern;
 public class GalleryInfo implements Parcelable {
 
     /**
-     * ISO 639-1
+     * ISO 639-1 language codes for simpleLanguage (from tags or title).
      */
-    @SuppressWarnings("unused")
     public static final String S_LANG_JA = "JA";
     public static final String S_LANG_EN = "EN";
     public static final String S_LANG_ZH = "ZH";
@@ -43,7 +42,9 @@ public class GalleryInfo implements Parcelable {
     public static final String S_LANG_TH = "TH";
     public static final String S_LANG_VI = "VI";
 
+    /** Ordered to match S_LANG_TAGS and S_LANG_PATTERNS (JA first, then translated). */
     public static final String[] S_LANGS = {
+            S_LANG_JA,
             S_LANG_EN,
             S_LANG_ZH,
             S_LANG_ES,
@@ -61,6 +62,7 @@ public class GalleryInfo implements Parcelable {
     };
 
     public static final Pattern[] S_LANG_PATTERNS = {
+            Pattern.compile("[(\\[]japanese[)\\]]|日本語|日文", Pattern.CASE_INSENSITIVE),
             Pattern.compile("[(\\[]eng(?:lish)?[)\\]]|英訳", Pattern.CASE_INSENSITIVE),
             // [(（\[]ch(?:inese)?[)）\]]|[汉漢]化|中[国國][语語]|中文|中国翻訳
             Pattern.compile("[(\uFF08\\[]ch(?:inese)?[)\uFF09\\]]|[汉漢]化|中[国國][语語]|中文|中国翻訳", Pattern.CASE_INSENSITIVE),
@@ -79,6 +81,7 @@ public class GalleryInfo implements Parcelable {
     };
 
     public static final String[] S_LANG_TAGS = {
+        "language:japanese",
         "language:english",
         "language:chinese",
         "language:spanish",
@@ -171,6 +174,7 @@ public class GalleryInfo implements Parcelable {
         dest.writeString(this.uploader);
         dest.writeFloat(this.rating);
         dest.writeByte(this.rated ? (byte) 1 : (byte) 0);
+        dest.writeInt(this.pages);
         dest.writeString(this.simpleLanguage);
         dest.writeStringArray(this.simpleTags);
         dest.writeInt(this.thumbWidth);
@@ -195,6 +199,7 @@ public class GalleryInfo implements Parcelable {
         this.uploader = in.readString();
         this.rating = in.readFloat();
         this.rated = in.readByte() != 0;
+        this.pages = in.readInt();
         this.simpleLanguage = in.readString();
         this.simpleTags = in.createStringArray();
         this.thumbWidth = in.readInt();
