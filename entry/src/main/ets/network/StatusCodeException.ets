@@ -45,6 +45,8 @@ const DEFAULT_STATUS_MESSAGES: StatusCodeMessages = {
   416: 'Requested Range Not Satisfiable',
   417: 'Expectation Failed',
   429: 'Too Many Requests',
+  // E-Hentai specific
+  509: 'Bandwidth Limit Exceeded',
   // 5xx Server errors
   500: 'Internal Server Error',
   501: 'Not Implemented',

@@ -12,6 +12,8 @@
 import { formatCookieHeader, parseSetCookieHeaders } from './Cookie.ets';
 import type { CookieJar } from './CookieRepository.ets';
 import { StatusCodeException } from './StatusCodeException.ets';
+import type { RetryStrategy } from './RetryInterceptor.ets';
+import { sleep } from './RetryInterceptor.ets';
 
 // ---- Constants ----
 
@@ -92,6 +94,19 @@ export interface HttpEngine {
   destroy?(): void;
 }
 
+// ---- Redirect constants ----
+
+const DEFAULT_MAX_REDIRECTS = 20;
+
+const REDIRECT_CODES: ReadonlySet<number> = new Set([301, 302, 303, 307, 308]);
+
+/**
+ * Status codes where the HTTP spec requires POST→GET conversion.
+ * 301/302 are technically "MAY" but all major browsers and OkHttp convert.
+ * 303 "MUST" convert.
+ */
+const POST_TO_GET_CODES: ReadonlySet<number> = new Set([301, 302, 303]);
+
 // ---- HttpClient ----
 
 export class HttpClient {
@@ -101,6 +116,8 @@ export class HttpClient {
   private readTimeoutMs: number;
   private cookieJar: CookieJar | null;
   private throwOnErrorStatus: boolean;
+  private maxRedirects: number;
+  private retryStrategy: RetryStrategy | null;
 
   constructor(options: {
     engine: HttpEngine;
@@ -113,12 +130,25 @@ export class HttpClient {
      * for HTTP responses with status code >= 400.
      */
     throwOnErrorStatus?: boolean;
+    /**
+     * Maximum number of redirects to follow (default 20, matching OkHttp).
+     * Set to 0 to disable redirect following.
+     */
+    maxRedirects?: number;
+    /**
+     * Optional retry strategy for transient failures.
+     * When set, failed requests are retried according to the strategy.
+     * Matches Android SpiderQueen retry behaviour (e.g. 5xx retried, 509 never retried).
+     */
+    retryStrategy?: RetryStrategy;
   }) {
     this.engine = options.engine;
     this.connectTimeoutMs = options.connectTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.readTimeoutMs = options.readTimeoutMs ?? DEFAULT_TIMEOUT_MS;
     this.cookieJar = options.cookieJar ?? null;
     this.throwOnErrorStatus = options.throwOnErrorStatus ?? true;
+    this.maxRedirects = options.maxRedirects ?? DEFAULT_MAX_REDIRECTS;
+    this.retryStrategy = options.retryStrategy ?? null;
     this.defaultHeaders = {
       'User-Agent': CHROME_USER_AGENT,
       'Accept': CHROME_ACCEPT,
@@ -137,8 +167,100 @@ export class HttpClient {
     this.cookieJar = jar;
   }
 
+  /** Replace the retry strategy at runtime. */
+  setRetryStrategy(strategy: RetryStrategy | null): void {
+    this.retryStrategy = strategy;
+  }
+
   /** Send a fully customised request. */
   async execute(request: HttpRequest): Promise<HttpResponse> {
+    if (this.retryStrategy) {
+      return this.executeWithRetry(request);
+    }
+    return this.executeWithRedirects(request);
+  }
+
+  /**
+   * Execute with retry logic wrapping the redirect-aware execution.
+   * On failure, consults the RetryStrategy to decide whether to retry.
+   */
+  private async executeWithRetry(request: HttpRequest): Promise<HttpResponse> {
+    let attempt = 0;
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      try {
+        return await this.executeWithRedirects(request);
+      } catch (error: unknown) {
+        const delayMs = this.retryStrategy!.shouldRetry(attempt, error);
+        if (delayMs < 0) {
+          throw error;
+        }
+        if (delayMs > 0) {
+          await sleep(delayMs);
+        }
+        attempt++;
+      }
+    }
+  }
+
+  /**
+   * Execute with redirect following (original execute logic).
+   */
+  private async executeWithRedirects(request: HttpRequest): Promise<HttpResponse> {
+    let currentUrl = request.url;
+    let currentMethod = request.method;
+    let currentBody = request.body;
+    let redirectCount = 0;
+
+    // eslint-disable-next-line no-constant-condition
+    while (true) {
+      const response = await this.executeOnce({
+        ...request,
+        url: currentUrl,
+        method: currentMethod,
+        body: currentBody,
+      });
+
+      // Check for redirects
+      if (
+        this.maxRedirects > 0 &&
+        REDIRECT_CODES.has(response.statusCode)
+      ) {
+        const location = response.headers['Location'] ?? response.headers['location'];
+        if (location && location.length > 0) {
+          redirectCount++;
+          if (redirectCount > this.maxRedirects) {
+            throw new Error(`Too many redirects (max ${this.maxRedirects})`);
+          }
+
+          // Resolve relative URL against current URL
+          currentUrl = resolveUrl(currentUrl, location);
+
+          // POST→GET conversion for 301/302/303
+          if (POST_TO_GET_CODES.has(response.statusCode) && currentMethod === 'POST') {
+            currentMethod = 'GET';
+            currentBody = undefined;
+          }
+
+          // 307/308 preserve the method and body
+          continue;
+        }
+      }
+
+      // Not a redirect — apply error handling and return
+      if (this.throwOnErrorStatus && response.statusCode >= 400) {
+        throw new StatusCodeException(response.statusCode, currentUrl);
+      }
+
+      return response;
+    }
+  }
+
+  /**
+   * Execute a single HTTP request (no redirect following).
+   * Handles cookie attach/save for this hop.
+   */
+  private async executeOnce(request: HttpRequest): Promise<HttpResponse> {
     const headers: Record<string, string> = {
       ...this.defaultHeaders,
       ...request.headers,
@@ -173,11 +295,6 @@ export class HttpClient {
           this.cookieJar.saveFromResponse(request.url, parsed);
         }
       }
-    }
-
-    // Throw StatusCodeException for HTTP error responses (>= 400)
-    if (this.throwOnErrorStatus && response.statusCode >= 400) {
-      throw new StatusCodeException(response.statusCode, request.url);
     }
 
     return response;
@@ -295,6 +412,26 @@ export function generateBoundary(): string {
     result += chars.charAt(Math.floor(Math.random() * chars.length));
   }
   return result;
+}
+
+// ---- URL resolution helper ----
+
+/**
+ * Resolve a potentially relative URL against a base URL.
+ * Handles absolute URLs, protocol-relative, and path-relative redirects.
+ */
+export function resolveUrl(base: string, target: string): string {
+  // Already absolute
+  if (target.startsWith('http://') || target.startsWith('https://')) {
+    return target;
+  }
+
+  try {
+    return new URL(target, base).href;
+  } catch {
+    // Fallback: return target as-is if URL parsing fails
+    return target;
+  }
 }
 
 // ---- EhRequestBuilder helper ----
