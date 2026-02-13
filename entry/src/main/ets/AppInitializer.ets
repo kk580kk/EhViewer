@@ -16,6 +16,8 @@ import { FileShareHelper } from './FileShareHelper.ets';
 import type { FsOps } from './util/FileUtils.ets';
 import type { ShareFsOps } from './FileShareHelper.ets';
 import type { PreferencesStore } from './preferences/PreferencesStore.ets';
+import { EhConfig } from './client/EhConfig.ets';
+import { EhConfigHolder } from './client/EhConfigHolder.ets';
 import { EhHttpClient } from './client/EhHttpClient.ets';
 import { SignInController } from './client/SignInController.ets';
 import { EhSignIn } from './client/EhSignIn.ets';
@@ -113,8 +115,9 @@ export class AppInitializer {
       status.settings = false;
     }
 
-    // 3. Database & HTTP client with cookie persistence
+    // 3. EhConfig (site, cookie/uconfig, User-Agent, image size) & HTTP client
     try {
+      EhConfigHolder.set(new EhConfig());
       if (cookieDbStore && httpEngine) {
         EhHttpClient.initialize(cookieDbStore, httpEngine);
       }
@@ -165,6 +168,7 @@ export class AppInitializer {
     FileShareHelper.reset();
     SettingsService.resetDefaults();
     EhHttpClient.reset();
+    EhConfigHolder.reset();
     SignInController.reset();
   }
 

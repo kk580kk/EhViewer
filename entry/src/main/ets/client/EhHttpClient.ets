@@ -11,6 +11,7 @@
 import { HttpClient } from '../network/HttpClient.ets';
 import type { HttpEngine } from '../network/HttpClient.ets';
 import { CookieDatabase } from '../network/CookieDatabase.ets';
+import { EhConfigHolder } from './EhConfigHolder.ets';
 import { EhCookieStore } from './EhCookieStore.ets';
 import type { DatabaseStore } from '../database/DatabaseStore.ets';
 
@@ -37,9 +38,11 @@ export class EhHttpClient {
   static initialize(dbStore: DatabaseStore, engine: HttpEngine): void {
     const cookieDb = new CookieDatabase(dbStore);
     const cookieStore = new EhCookieStore(cookieDb);
+    const config = EhConfigHolder.get();
     const httpClient = new HttpClient({
       engine,
       cookieJar: cookieStore,
+      defaultHeaders: { 'User-Agent': config.userAgent },
     });
 
     EhHttpClient.cookieDb = cookieDb;

@@ -5,6 +5,9 @@ import { CookieBuilder, MAX_EXPIRES } from '../../../main/ets/network/Cookie.ets
 import { MemoryCookiePersistence } from '../../../main/ets/network/CookieRepository.ets';
 import { EhUrl } from '../../../main/ets/client/EhUrl.ets';
 import { EhConfig } from '../../../main/ets/client/EhConfig.ets';
+import { EhConfigHolder } from '../../../main/ets/client/EhConfigHolder.ets';
+import { SettingsService } from '../../../main/ets/service/SettingsService.ets';
+import { MemoryPreferencesStore } from '../../../main/ets/preferences/MemoryPreferencesStore.ets';
 
 describe('EhCookieStore', () => {
   let persistence: MemoryCookiePersistence;
@@ -13,6 +16,8 @@ describe('EhCookieStore', () => {
   beforeEach(() => {
     persistence = new MemoryCookiePersistence();
     store = new EhCookieStore(persistence);
+    SettingsService.initialize(new MemoryPreferencesStore());
+    EhConfigHolder.set(new EhConfig());
   });
 
   describe('hasSignedIn', () => {
@@ -90,13 +95,16 @@ describe('EhCookieStore', () => {
       assert.strictEqual(nwCookies[0].value, EhConfig.CONTENT_WARNING_NOT_SHOW);
     });
 
-    it('should filter out uconfig cookie from stored cookies', () => {
+    it('should inject uconfig from EhConfig and ignore stored uconfig', () => {
       store.addCookie(
-        new CookieBuilder().name(EhConfig.KEY_UCONFIG).value('some_val')
+        new CookieBuilder().name(EhConfig.KEY_UCONFIG).value('stored_val')
           .domain(EhUrl.DOMAIN_E).path('/').expiresAt(MAX_EXPIRES).build()
       );
       const cookies = store.loadForRequest(EhUrl.HOST_E);
-      assert.ok(!cookies.some(c => c.name === EhConfig.KEY_UCONFIG));
+      const uconfigCookies = cookies.filter(c => c.name === EhConfig.KEY_UCONFIG);
+      assert.strictEqual(uconfigCookies.length, 1);
+      assert.strictEqual(uconfigCookies[0].value, EhConfigHolder.get().uconfig());
+      assert.ok(uconfigCookies[0].value.includes('xr_a'));
     });
 
     it('should not add tips cookie for non-e-hentai domains', () => {
@@ -107,6 +115,99 @@ describe('EhCookieStore', () => {
       const cookies = store.loadForRequest('https://other.com/');
       assert.strictEqual(cookies.length, 1);
       assert.strictEqual(cookies[0].name, 'sid');
+    });
+  });
+
+  describe('saveFromResponse – auth cookie persistence', () => {
+    it('should force-persist session auth cookies from EH domains', () => {
+      // Session cookies (no expiresAt → persistent = false)
+      const memberId = new CookieBuilder()
+        .name(EhCookieStore.KEY_IPD_MEMBER_ID).value('12345')
+        .domain(EhUrl.DOMAIN_E).path('/').build();
+      const passHash = new CookieBuilder()
+        .name(EhCookieStore.KEY_IPD_PASS_HASH).value('abc123def456abc123def456abc123de')
+        .domain(EhUrl.DOMAIN_E).path('/').build();
+      assert.strictEqual(memberId.persistent, false);
+      assert.strictEqual(passHash.persistent, false);
+
+      store.saveFromResponse(EhUrl.HOST_E, [memberId, passHash]);
+
+      // Re-create store from same persistence – only persistent cookies survive
+      const store2 = new EhCookieStore(persistence);
+      const cookies = store2.getCookies(EhUrl.HOST_E);
+      assert.strictEqual(cookies.length, 2);
+      const names = cookies.map(c => c.name);
+      assert.ok(names.includes(EhCookieStore.KEY_IPD_MEMBER_ID));
+      assert.ok(names.includes(EhCookieStore.KEY_IPD_PASS_HASH));
+    });
+
+    it('should force-persist session igneous cookie from EX domain', () => {
+      const igneous = new CookieBuilder()
+        .name(EhCookieStore.KEY_IGNEOUS).value('mysecretvalue')
+        .domain(EhUrl.DOMAIN_EX).path('/').build();
+      assert.strictEqual(igneous.persistent, false);
+
+      store.saveFromResponse(EhUrl.HOST_EX, [igneous]);
+
+      const store2 = new EhCookieStore(persistence);
+      const cookies = store2.getCookies(EhUrl.HOST_EX);
+      assert.strictEqual(cookies.length, 1);
+      assert.strictEqual(cookies[0].name, EhCookieStore.KEY_IGNEOUS);
+      assert.strictEqual(cookies[0].value, 'mysecretvalue');
+    });
+
+    it('should NOT force-persist non-auth session cookies from EH domains', () => {
+      const sessionCookie = new CookieBuilder()
+        .name('some_tracking').value('xyz')
+        .domain(EhUrl.DOMAIN_E).path('/').build();
+      assert.strictEqual(sessionCookie.persistent, false);
+
+      store.saveFromResponse(EhUrl.HOST_E, [sessionCookie]);
+      // Available in current instance
+      assert.strictEqual(store.getCookies(EhUrl.HOST_E).length, 1);
+
+      // Not available after re-creating from persistence
+      const store2 = new EhCookieStore(persistence);
+      assert.strictEqual(store2.getCookies(EhUrl.HOST_E).length, 0);
+    });
+
+    it('should NOT force-persist auth cookies from non-EH domains', () => {
+      const cookie = new CookieBuilder()
+        .name(EhCookieStore.KEY_IPD_MEMBER_ID).value('12345')
+        .domain('other-site.com').path('/').build();
+
+      store.saveFromResponse('https://other-site.com/', [cookie]);
+
+      const store2 = new EhCookieStore(persistence);
+      assert.strictEqual(store2.getCookies('https://other-site.com/').length, 0);
+    });
+
+    it('should persist auth cookies from forums.e-hentai.org subdomain', () => {
+      const memberId = new CookieBuilder()
+        .name(EhCookieStore.KEY_IPD_MEMBER_ID).value('12345')
+        .domain(EhUrl.DOMAIN_E).path('/').build();
+
+      store.saveFromResponse('https://forums.e-hentai.org/', [memberId]);
+
+      const store2 = new EhCookieStore(persistence);
+      const cookies = store2.getCookies(EhUrl.HOST_E);
+      assert.strictEqual(cookies.length, 1);
+      assert.strictEqual(cookies[0].name, EhCookieStore.KEY_IPD_MEMBER_ID);
+    });
+
+    it('should not alter already-persistent auth cookies', () => {
+      const expiry = Date.now() + 365 * 24 * 3600_000;
+      const memberId = new CookieBuilder()
+        .name(EhCookieStore.KEY_IPD_MEMBER_ID).value('12345')
+        .domain(EhUrl.DOMAIN_E).path('/').expiresAt(expiry).build();
+      assert.strictEqual(memberId.persistent, true);
+
+      store.saveFromResponse(EhUrl.HOST_E, [memberId]);
+
+      const store2 = new EhCookieStore(persistence);
+      const cookies = store2.getCookies(EhUrl.HOST_E);
+      assert.strictEqual(cookies.length, 1);
+      assert.strictEqual(cookies[0].value, '12345');
     });
   });
 

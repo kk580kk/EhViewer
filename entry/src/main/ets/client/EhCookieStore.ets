@@ -20,12 +20,20 @@ import {
 } from '../network/CookieRepository.ets';
 import type { CookiePersistence } from '../network/CookieRepository.ets';
 import { EhConfig } from './EhConfig.ets';
+import { EhConfigHolder } from './EhConfigHolder.ets';
 import { EhUrl } from './EhUrl.ets';
 
 export class EhCookieStore extends CookieRepository {
   static readonly KEY_IPD_MEMBER_ID: string = 'ipb_member_id';
   static readonly KEY_IPD_PASS_HASH: string = 'ipb_pass_hash';
   static readonly KEY_IGNEOUS: string = 'igneous';
+
+  /** Auth cookie names that must be persisted even if the server sends them as session cookies. */
+  private static readonly AUTH_COOKIE_NAMES: ReadonlySet<string> = new Set([
+    EhCookieStore.KEY_IPD_MEMBER_ID,
+    EhCookieStore.KEY_IPD_PASS_HASH,
+    EhCookieStore.KEY_IGNEOUS,
+  ]);
 
   /** Pre-built cookie that suppresses the content warning page. */
   static readonly TIPS_COOKIE: Cookie = new CookieBuilder()
@@ -49,6 +57,32 @@ export class EhCookieStore extends CookieRepository {
       this.contains(EhUrl.HOST_E, EhCookieStore.KEY_IPD_MEMBER_ID) &&
       this.contains(EhUrl.HOST_E, EhCookieStore.KEY_IPD_PASS_HASH)
     );
+  }
+
+  /**
+   * Ensures auth cookies from EH domains are persisted to the database,
+   * even if the server sends them as session cookies (without Expires/Max-Age).
+   */
+  override saveFromResponse(url: string, cookies: Cookie[]): void {
+    let hostname: string;
+    try {
+      hostname = new URL(url).hostname;
+    } catch {
+      super.saveFromResponse(url, cookies);
+      return;
+    }
+
+    if (domainMatch(hostname, EhUrl.DOMAIN_E) || domainMatch(hostname, EhUrl.DOMAIN_EX)) {
+      const processed: Cookie[] = cookies.map(cookie => {
+        if (!cookie.persistent && EhCookieStore.AUTH_COOKIE_NAMES.has(cookie.name)) {
+          return EhCookieStore.newCookie(cookie, cookie.domain, true, false, false);
+        }
+        return cookie;
+      });
+      super.saveFromResponse(url, processed);
+    } else {
+      super.saveFromResponse(url, cookies);
+    }
   }
 
   /**
@@ -101,11 +135,21 @@ export class EhCookieStore extends CookieRepository {
 
     const result: Cookie[] = [];
     for (const cookie of cookies) {
-      // Skip content warning and uconfig cookies
+      // Skip content warning and uconfig cookies (we inject uconfig from EhConfig)
       if (cookie.name === EhConfig.KEY_CONTENT_WARNING) continue;
       if (cookie.name === EhConfig.KEY_UCONFIG) continue;
       result.push(cookie);
     }
+    // Inject uconfig cookie from current EhConfig
+    const ehConfig = EhConfigHolder.get();
+    const domain = EhConfig.getGalleryDomain();
+    result.push(new CookieBuilder()
+      .name(EhConfig.KEY_UCONFIG)
+      .value(ehConfig.uconfig())
+      .domain(domain)
+      .path('/')
+      .expiresAt(MAX_EXPIRES)
+      .build());
     // Always add the tips cookie to suppress the content warning
     result.push(EhCookieStore.TIPS_COOKIE);
     return result;
