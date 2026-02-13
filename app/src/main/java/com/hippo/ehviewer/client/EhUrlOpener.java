@@ -16,10 +16,17 @@
 
 package com.hippo.ehviewer.client;
 
+import android.content.Context;
+import android.content.Intent;
+import android.net.Uri;
 import android.os.Bundle;
+import android.provider.Browser;
 import android.text.TextUtils;
 import android.util.Log;
+import android.widget.Toast;
+import androidx.annotation.NonNull;
 import androidx.annotation.Nullable;
+import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.client.data.ListUrlBuilder;
 import com.hippo.ehviewer.client.parser.GalleryDetailUrlParser;
 import com.hippo.ehviewer.client.parser.GalleryListUrlParser;
@@ -28,10 +35,29 @@ import com.hippo.ehviewer.ui.scene.GalleryDetailScene;
 import com.hippo.ehviewer.ui.scene.GalleryListScene;
 import com.hippo.ehviewer.ui.scene.ProgressScene;
 import com.hippo.scene.Announcer;
+import com.hippo.util.ExceptionUtils;
 
 public class EhUrlOpener {
 
     private static final String TAG = EhUrlOpener.class.getSimpleName();
+
+    /**
+     * Opens the given URL in the system browser (or other app that handles VIEW). Use for external
+     * links or when in-app parsing fails.
+     */
+    public static void openInSystemBrowser(@NonNull Context context, String url) {
+        if (TextUtils.isEmpty(url)) {
+            return;
+        }
+        Intent intent = new Intent(Intent.ACTION_VIEW, Uri.parse(url));
+        intent.putExtra(Browser.EXTRA_APPLICATION_ID, context.getPackageName());
+        try {
+            context.startActivity(intent);
+        } catch (Throwable e) {
+            ExceptionUtils.throwIfFatal(e);
+            Toast.makeText(context, R.string.error_cant_find_activity, Toast.LENGTH_SHORT).show();
+        }
+    }
 
     @Nullable
     public static Announcer parseUrl(String url) {
