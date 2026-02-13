@@ -21,6 +21,14 @@ export interface FsOps {
   statSync(path: string): { isDirectory(): boolean; isFile(): boolean };
   writeFileSync(path: string, data: string | Uint8Array, encoding?: string): void;
   unlinkSync(path: string): void;
+  /** List entries in a directory. Returns entry names (not full paths). */
+  readdirSync?(path: string): string[];
+  /** Copy a file from src to dst. */
+  copyFileSync?(src: string, dst: string): void;
+  /** Remove a directory. When recursive is true, removes all contents. */
+  rmdirSync?(path: string, options?: { recursive?: boolean }): void;
+  /** Read file contents as a UTF-8 string. */
+  readFileSync?(path: string, encoding: string): string;
 }
 
 // ---- Pure path utilities (no FS access) ----
@@ -166,6 +174,77 @@ export function writeToFile(fs: FsOps, filePath: string, content: string): boole
       return false;
     }
     fs.writeFileSync(filePath, content, 'utf-8');
+    return true;
+  } catch (_e) {
+    return false;
+  }
+}
+
+// ---- Directory copy / delete utilities ----
+
+/**
+ * Copy all contents of a directory to another directory.
+ * Both srcDir and dstDir must exist.
+ *
+ * @returns true if all entries were copied successfully
+ */
+export function copyDirectoryContents(fs: FsOps, srcDir: string, dstDir: string): boolean {
+  if (!fs.readdirSync || !fs.copyFileSync) {
+    return false;
+  }
+  try {
+    const entries = fs.readdirSync(srcDir);
+    let allSuccess = true;
+    for (const name of entries) {
+      const srcPath = joinPath(srcDir, name);
+      const dstPath = joinPath(dstDir, name);
+      const stat = fs.statSync(srcPath);
+      if (stat.isDirectory()) {
+        if (!ensureDirectory(fs, dstPath)) {
+          allSuccess = false;
+          continue;
+        }
+        if (!copyDirectoryContents(fs, srcPath, dstPath)) {
+          allSuccess = false;
+        }
+      } else {
+        fs.copyFileSync(srcPath, dstPath);
+      }
+    }
+    return allSuccess;
+  } catch (_e) {
+    return false;
+  }
+}
+
+/**
+ * Delete a directory and all its contents recursively.
+ */
+export function deleteDirectoryRecursively(fs: FsOps, dirPath: string): boolean {
+  if (fs.rmdirSync) {
+    try {
+      fs.rmdirSync(dirPath, { recursive: true });
+      return true;
+    } catch (_e) {
+      return false;
+    }
+  }
+  // Fallback: manual recursive delete
+  if (!fs.readdirSync) {
+    return false;
+  }
+  try {
+    const entries = fs.readdirSync(dirPath);
+    for (const name of entries) {
+      const entryPath = joinPath(dirPath, name);
+      const stat = fs.statSync(entryPath);
+      if (stat.isDirectory()) {
+        deleteDirectoryRecursively(fs, entryPath);
+      } else {
+        fs.unlinkSync(entryPath);
+      }
+    }
+    fs.rmdirSync!(dirPath);
     return true;
   } catch (_e) {
     return false;

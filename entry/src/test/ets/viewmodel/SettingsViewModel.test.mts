@@ -246,9 +246,9 @@ describe('SettingsViewModel', () => {
   });
 
   describe('buildDownloadGroup', () => {
-    it('should contain 4 items', () => {
+    it('should contain 5 items', () => {
       const group = vm.buildDownloadGroup();
-      assert.strictEqual(group.items.length, 4);
+      assert.strictEqual(group.items.length, 5);
     });
 
     it('should show download location or Not set', () => {

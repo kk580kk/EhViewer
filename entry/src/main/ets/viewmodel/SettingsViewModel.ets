@@ -243,6 +243,12 @@ export class SettingsViewModel {
           summary: location ?? 'Not set',
           type: 'action',
         },
+        {
+          key: 'migrate_download',
+          title: 'Migrate Download Directory',
+          summary: 'Move all downloaded galleries to a new location',
+          type: 'action',
+        },
       ],
     };
   }
