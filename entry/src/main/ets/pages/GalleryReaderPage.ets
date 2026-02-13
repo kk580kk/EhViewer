@@ -12,12 +12,21 @@ import router from '@ohos.router';
 import {
   GalleryReaderViewModel,
   PageState,
+  ReadingMode,
 } from '../viewmodel/GalleryReaderViewModel.ets';
 import type { PageInfo } from '../viewmodel/GalleryReaderViewModel.ets';
 import { GallerySource } from '../gallery/GallerySource.ets';
 import { DirGalleryProvider } from '../gallery/DirGalleryProvider.ets';
 import type { DirGalleryFsOps } from '../gallery/DirGalleryProvider.ets';
+import { ArchiveGalleryProvider } from '../gallery/ArchiveGalleryProvider.ets';
+import type { ArchiveReader, ArchiveFsOps } from '../gallery/ArchiveGalleryProvider.ets';
+import { ArchiveOpener } from '../gallery/ArchiveOpener.ets';
+import type { ArchiveFileOpener, ArchiveFileHandle, InflaterFactory, Inflater } from '../gallery/StreamingZipReader.ets';
+import { EhGalleryProvider } from '../gallery/EhGalleryProvider.ets';
+import type { SpiderQueenFactory, SpiderQueenLike } from '../gallery/EhGalleryProvider.ets';
+import { GalleryInfo } from '../model/GalleryInfo.ets';
 import type { GalleryProvider2 } from '../gallery/GalleryProvider2.ets';
+import { SettingsService } from '../service/SettingsService.ets';
 
 /**
  * Gallery reader / viewer page — displays gallery images one by one.
@@ -40,13 +49,13 @@ interface ReaderParams {
   title: string;
 }
 
+// ---- Production filesystem adapters ----
+
 /**
- * Production filesystem adapter using @ohos.file.fs.
- * Falls back to no-op if the module is unavailable (test environment).
+ * Production filesystem adapter for DirGalleryProvider using @ohos.file.fs.
  */
 class OhosDirFsOps implements DirGalleryFsOps {
   readdirSync(dirPath: string): string[] {
-    // In production, use @ohos.file.fs.listFileSync
     try {
       const fs = globalThis.__ohosFs;
       if (fs && fs.listFileSync) {
@@ -86,6 +95,103 @@ class OhosDirFsOps implements DirGalleryFsOps {
   }
 }
 
+/**
+ * Production filesystem adapter for ArchiveGalleryProvider.
+ */
+class OhosArchiveFsOps implements ArchiveFsOps {
+  writeFileSync(path: string, data: Uint8Array): void {
+    try {
+      const fs = globalThis.__ohosFs;
+      if (fs && fs.writeFileSync) {
+        fs.writeFileSync(path, data);
+      }
+    } catch (_e) { /* ignore */ }
+  }
+
+  existsSync(path: string): boolean {
+    try {
+      const fs = globalThis.__ohosFs;
+      if (fs && fs.accessSync) {
+        return fs.accessSync(path);
+      }
+    } catch (_e) { /* fall through */ }
+    return false;
+  }
+}
+
+/**
+ * Production file opener for StreamingZipReader.
+ */
+class OhosArchiveFileOpener implements ArchiveFileOpener {
+  async open(filePath: string): Promise<ArchiveFileHandle> {
+    const fs = globalThis.__ohosFs;
+    if (!fs) throw new Error('File system not available');
+    const fd = fs.openSync(filePath, 0o0); // O_RDONLY
+    const stat = fs.statSync(filePath);
+    const fileSize = stat.size;
+    return {
+      size: fileSize,
+      async read(offset: number, length: number): Promise<Uint8Array> {
+        const buf = new ArrayBuffer(length);
+        fs.readSync(fd.fd, buf, { offset: 0, length, position: offset });
+        return new Uint8Array(buf);
+      },
+      close(): void {
+        fs.closeSync(fd);
+      },
+    };
+  }
+}
+
+/**
+ * Production inflater factory using pako or @ohos.zlib.
+ */
+class OhosInflaterFactory implements InflaterFactory {
+  create(): Inflater {
+    // Attempt to use globalThis.__pakoInflate or similar
+    const pako = globalThis.__pako;
+    if (pako) {
+      const inf = new pako.Inflate({ raw: true });
+      return {
+        inflate(data: Uint8Array): Uint8Array {
+          inf.push(data, false);
+          if (inf.result && inf.result.length > 0) {
+            const out = new Uint8Array(inf.result);
+            inf.result = null;
+            return out;
+          }
+          return new Uint8Array(0);
+        },
+        finish(): Uint8Array {
+          inf.push(new Uint8Array(0), true);
+          return inf.result ? new Uint8Array(inf.result) : new Uint8Array(0);
+        },
+      };
+    }
+    throw new Error('No decompression library available');
+  }
+}
+
+/**
+ * Production SpiderQueenFactory — delegates to the global SpiderQueen singleton.
+ */
+class OhosSpiderQueenFactory implements SpiderQueenFactory {
+  obtain(galleryInfo: GalleryInfo, mode: number): SpiderQueenLike {
+    const sq = globalThis.__SpiderQueen;
+    if (sq && sq.obtain) {
+      return sq.obtain(galleryInfo, mode);
+    }
+    throw new Error('SpiderQueen not available');
+  }
+
+  release(spider: SpiderQueenLike, mode: number): void {
+    const sq = globalThis.__SpiderQueen;
+    if (sq && sq.release) {
+      sq.release(spider, mode);
+    }
+  }
+}
+
 @Entry
 @Component
 struct GalleryReaderPage {
@@ -94,8 +200,11 @@ struct GalleryReaderPage {
   @State toolbarVisible: boolean = false;
   @State progressText: string = '';
   @State pageTitle: string = 'Reader';
-  @State pageImageData: Map<number, Uint8Array> = new Map();
-  @State pageStates: Map<number, PageInfo> = new Map();
+  @State sliderValue: number = 0;
+  @State stateVersion: number = 0; // Bumped on every change to trigger re-render
+  @State readingMode: number = ReadingMode.LEFT_TO_RIGHT;
+  @State showPageMenu: boolean = false;
+  @State longPressPageIndex: number = -1;
 
   private vm: GalleryReaderViewModel = new GalleryReaderViewModel();
   private source: string = 'eh';
@@ -120,12 +229,16 @@ struct GalleryReaderPage {
       this.totalPages = this.vm.totalPages;
       this.progressText = this.vm.progressText;
       this.toolbarVisible = this.vm.toolbarVisible;
+      this.sliderValue = this.vm.progressRatio * 100;
+      this.readingMode = this.vm.readingMode;
+      this.stateVersion++;
     });
 
     const provider = this.buildProvider();
     if (provider !== null) {
       const gallerySource = this.resolveGallerySource();
       this.vm.start(provider, gallerySource, this.startPage);
+      this.readingMode = this.vm.readingMode;
     }
   }
 
@@ -134,11 +247,23 @@ struct GalleryReaderPage {
   }
 
   private buildProvider(): GalleryProvider2 | null {
-    if (this.source === 'dir') {
-      return new DirGalleryProvider(this.path, new OhosDirFsOps());
+    switch (this.source) {
+      case 'dir':
+        return new DirGalleryProvider(this.path, new OhosDirFsOps());
+      case 'archive':
+        return new ArchiveGalleryProvider(
+          this.path,
+          new ArchiveOpener(new OhosArchiveFileOpener(), new OhosInflaterFactory()),
+          new OhosArchiveFsOps(),
+        );
+      case 'eh':
+      default: {
+        const gi = new GalleryInfo();
+        gi.gid = this.gid;
+        gi.token = this.token;
+        return new EhGalleryProvider(gi, new OhosSpiderQueenFactory());
+      }
     }
-    // archive and eh sources are not yet fully wired (placeholder)
-    return null;
   }
 
   private resolveGallerySource(): GallerySource {
@@ -153,6 +278,7 @@ struct GalleryReaderPage {
     Stack() {
       if (this.totalPages > 0) {
         // Image viewer with swipe navigation
+        // Reading direction: vertical uses Swiper vertical mode; RTL reverses slider
         Swiper() {
           ForEach(this.buildPageIndices(), (pageIndex: number) => {
             this.PageContent(pageIndex)
@@ -161,6 +287,7 @@ struct GalleryReaderPage {
         .index(this.currentPage)
         .loop(false)
         .indicator(false)
+        .vertical(this.readingMode === ReadingMode.TOP_TO_BOTTOM)
         .onChange((index: number) => {
           this.vm.goToPage(index);
         })
@@ -169,9 +296,14 @@ struct GalleryReaderPage {
       } else if (this.vm.provider !== null && this.totalPages === 0) {
         // Loading state
         Column() {
+          LoadingProgress()
+            .width(48)
+            .height(48)
+            .color('#cccccc')
           Text('Loading...')
             .fontSize(16)
             .fontColor('#cccccc')
+            .margin({ top: 16 })
         }
         .width('100%')
         .height('100%')
@@ -227,24 +359,56 @@ struct GalleryReaderPage {
         .position({ x: 0, y: 0 })
       }
 
-      // Bottom overlay: progress bar + page number
+      // Bottom overlay: slider + page number
+      // RTL mode reverses the slider labels (end on left, start on right)
       if (this.toolbarVisible && this.totalPages > 0) {
         Column() {
+          // Page slider for quick navigation
           Row() {
-            Text(this.progressText)
-              .fontSize(14)
+            Text(this.readingMode === ReadingMode.RIGHT_TO_LEFT
+              ? `${this.totalPages}` : `${this.currentPage + 1}`)
+              .fontSize(13)
               .fontColor('#ffffff')
+              .width(40)
+              .textAlign(TextAlign.Center)
+            Slider({
+              value: this.readingMode === ReadingMode.RIGHT_TO_LEFT
+                ? 100 - this.sliderValue : this.sliderValue,
+              min: 0,
+              max: 100,
+              step: this.totalPages > 1 ? 100 / (this.totalPages - 1) : 1,
+            })
               .layoutWeight(1)
+              .blockColor('#ffffff')
+              .trackColor('#66ffffff')
+              .selectedColor('#4169E1')
+              .onChange((value: number) => {
+                const ratio = this.readingMode === ReadingMode.RIGHT_TO_LEFT
+                  ? (100 - value) / 100 : value / 100;
+                this.vm.goToPageByRatio(ratio);
+              })
+            Text(this.readingMode === ReadingMode.RIGHT_TO_LEFT
+              ? `${this.currentPage + 1}` : `${this.totalPages}`)
+              .fontSize(13)
+              .fontColor('#ffffff')
+              .width(40)
               .textAlign(TextAlign.Center)
           }
           .width('100%')
-          .height(48)
-          .backgroundColor('#AA000000')
-          .justifyContent(FlexAlign.Center)
+          .padding({ left: 8, right: 8 })
+          .alignItems(VerticalAlign.Center)
+
+          Text(this.progressText)
+            .fontSize(13)
+            .fontColor('#cccccc')
+            .textAlign(TextAlign.Center)
+            .margin({ bottom: 4 })
         }
         .width('100%')
+        .backgroundColor('#AA000000')
+        .padding({ top: 4, bottom: 8 })
         .position({ x: 0, y: '100%' })
-        .translate({ y: -48 })
+        .translate({ y: -96 })
       }
 
       // Always-visible progress indicator (small)
@@ -272,22 +436,159 @@ struct GalleryReaderPage {
           .position({ x: 16, y: 16 })
           .onClick(() => { router.back(); })
       }
+
+      // Long-press page menu (refresh / save)
+      if (this.showPageMenu && this.longPressPageIndex >= 0) {
+        Column() {
+          Column() {
+            Text(`Page ${this.longPressPageIndex + 1}`)
+              .fontSize(16)
+              .fontColor('#ffffff')
+              .fontWeight(FontWeight.Bold)
+              .margin({ bottom: 16 })
+
+            // Refresh
+            Text('Refresh')
+              .fontSize(15)
+              .fontColor('#ffffff')
+              .width('100%')
+              .height(44)
+              .textAlign(TextAlign.Center)
+              .borderRadius(8)
+              .backgroundColor('#334169E1')
+              .margin({ bottom: 8 })
+              .onClick(() => {
+                this.vm.retryPage(this.longPressPageIndex);
+                this.showPageMenu = false;
+              })
+
+            // Save
+            Text('Save Image')
+              .fontSize(15)
+              .fontColor('#ffffff')
+              .width('100%')
+              .height(44)
+              .textAlign(TextAlign.Center)
+              .borderRadius(8)
+              .backgroundColor('#334169E1')
+              .margin({ bottom: 8 })
+              .onClick(() => {
+                this.onSaveImage(this.longPressPageIndex);
+                this.showPageMenu = false;
+              })
+
+            // Cancel
+            Text('Cancel')
+              .fontSize(15)
+              .fontColor('#999999')
+              .width('100%')
+              .height(44)
+              .textAlign(TextAlign.Center)
+              .borderRadius(8)
+              .backgroundColor('#33ffffff')
+              .onClick(() => { this.showPageMenu = false; })
+          }
+          .width('80%')
+          .padding(20)
+          .backgroundColor('#DD2a2a2a')
+          .borderRadius(16)
+        }
+        .width('100%')
+        .height('100%')
+        .justifyContent(FlexAlign.Center)
+        .alignItems(HorizontalAlign.Center)
+        .backgroundColor('#88000000')
+        .onClick(() => { this.showPageMenu = false; })
+      }
     }
     .width('100%')
     .height('100%')
     .backgroundColor('#1a1a1a')
     .onClick(() => {
-      this.vm.toggleToolbar();
+      if (!this.showPageMenu) {
+        this.vm.toggleToolbar();
+      }
     })
+  }
+
+  private onSaveImage(index: number): void {
+    try {
+      const fs = globalThis.__ohosFs;
+      if (!fs) return;
+      // Use a default save directory (external image dir or downloads)
+      const ctx = globalThis.__appContext;
+      const dir = ctx?.filesDir ?? '/data/storage/el2/base/files';
+      const result = this.vm.saveImage(index, dir);
+      // In production, show a toast with result
+    } catch (_e) {
+      // Ignore — production would show error toast
+    }
   }
 
   @Builder
   PageContent(pageIndex: number) {
+    // Use stateVersion to force re-evaluation when page states change
     Column() {
-      // Request the page from the provider
-      Text(`Page ${pageIndex + 1}`)
-        .fontSize(14)
-        .fontColor('#999999')
+      if (this.stateVersion >= 0) {
+        // Check page state from the ViewModel
+        if (this.vm.getPageInfo(pageIndex).state === PageState.READY) {
+          // Image is ready — display it
+          if (this.vm.getPageImageData(pageIndex) !== null) {
+            Image(this.vm.getPageImageData(pageIndex)!)
+              .width('100%')
+              .height('100%')
+              .objectFit(ImageFit.Contain)
+          } else {
+            Text(`Page ${pageIndex + 1}`)
+              .fontSize(14)
+              .fontColor('#999999')
+          }
+        } else if (this.vm.getPageInfo(pageIndex).state === PageState.LOADING) {
+          // Loading with progress
+          Column() {
+            LoadingProgress()
+              .width(40)
+              .height(40)
+              .color('#cccccc')
+            Text(`${Math.round(this.vm.getPageInfo(pageIndex).progress * 100)}%`)
+              .fontSize(13)
+              .fontColor('#999999')
+              .margin({ top: 8 })
+          }
+        } else if (this.vm.getPageInfo(pageIndex).state === PageState.FAILED) {
+          // Error state with retry
+          Column() {
+            Text('\u26A0')
+              .fontSize(36)
+              .fontColor('#F44336')
+              .margin({ bottom: 8 })
+            Text(this.vm.getPageInfo(pageIndex).error || 'Failed to load')
+              .fontSize(13)
+              .fontColor('#999999')
+              .textAlign(TextAlign.Center)
+              .margin({ bottom: 16 })
+            Text('Retry')
+              .fontSize(15)
+              .fontColor('#4169E1')
+              .padding({ left: 16, right: 16, top: 8, bottom: 8 })
+              .borderRadius(20)
+              .backgroundColor('#1A4169E1')
+              .onClick(() => { this.vm.retryPage(pageIndex); })
+          }
+        } else {
+          // Waiting state
+          Column() {
+            LoadingProgress()
+              .width(40)
+              .height(40)
+              .color('#666666')
+            Text(`Page ${pageIndex + 1}`)
+              .fontSize(13)
+              .fontColor('#666666')
+              .margin({ top: 8 })
+          }
+        }
+      }
     }
     .width('100%')
     .height('100%')
@@ -297,6 +598,13 @@ struct GalleryReaderPage {
     .onAppear(() => {
       this.vm.requestPage(pageIndex);
     })
+    .gesture(
+      LongPressGesture({ repeat: false })
+        .onAction(() => {
+          this.longPressPageIndex = pageIndex;
+          this.showPageMenu = true;
+        })
+    )
   }
 
   private buildPageIndices(): number[] {

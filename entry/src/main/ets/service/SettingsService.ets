@@ -39,6 +39,22 @@ const KEY_SECURITY = 'security';
 const KEY_ENABLE_FINGERPRINT = 'enable_fingerprint';
 const KEY_ENABLED_SECURITY = 'enable_secure';
 
+// ---- Reading settings keys ----
+const KEY_READING_DIRECTION = 'reading_direction';
+const KEY_KEEP_SCREEN_ON = 'keep_screen_on';
+const KEY_SHOW_PROGRESS = 'show_progress';
+const KEY_VOLUME_PAGE = 'volume_page';
+const KEY_READING_FULLSCREEN = 'reading_fullscreen';
+const KEY_CUSTOM_SCREEN_LIGHTNESS = 'custom_screen_lightness';
+const KEY_SCREEN_LIGHTNESS = 'screen_lightness';
+const KEY_PAGE_SCALING = 'page_scaling';
+const KEY_START_POSITION = 'start_position';
+
+/** Reading direction: 0=LTR, 1=RTL, 2=Vertical */
+export const READING_DIRECTION_LTR = 0;
+export const READING_DIRECTION_RTL = 1;
+export const READING_DIRECTION_VERTICAL = 2;
+
 export class SettingsService {
   private static store: PreferencesStore = new MemoryPreferencesStore();
 
@@ -212,6 +228,84 @@ export class SettingsService {
 
   static putEnabledSecurity(value: boolean): void {
     SettingsService.store.putBoolean(KEY_ENABLED_SECURITY, value);
+  }
+
+  // ---- Reading settings ----
+
+  /** Reading direction: 0=LTR, 1=RTL, 2=Vertical. Default: LTR. */
+  static getReadingDirection(): number {
+    return clamp(SettingsService.store.getNumber(KEY_READING_DIRECTION, READING_DIRECTION_LTR), 0, 2);
+  }
+
+  static setReadingDirection(direction: number): void {
+    SettingsService.store.putNumber(KEY_READING_DIRECTION, clamp(direction, 0, 2));
+  }
+
+  static getKeepScreenOn(): boolean {
+    return SettingsService.store.getBoolean(KEY_KEEP_SCREEN_ON, false);
+  }
+
+  static setKeepScreenOn(value: boolean): void {
+    SettingsService.store.putBoolean(KEY_KEEP_SCREEN_ON, value);
+  }
+
+  static getShowProgress(): boolean {
+    return SettingsService.store.getBoolean(KEY_SHOW_PROGRESS, true);
+  }
+
+  static setShowProgress(value: boolean): void {
+    SettingsService.store.putBoolean(KEY_SHOW_PROGRESS, value);
+  }
+
+  static getVolumePage(): boolean {
+    return SettingsService.store.getBoolean(KEY_VOLUME_PAGE, false);
+  }
+
+  static setVolumePage(value: boolean): void {
+    SettingsService.store.putBoolean(KEY_VOLUME_PAGE, value);
+  }
+
+  static getReadingFullscreen(): boolean {
+    return SettingsService.store.getBoolean(KEY_READING_FULLSCREEN, true);
+  }
+
+  static setReadingFullscreen(value: boolean): void {
+    SettingsService.store.putBoolean(KEY_READING_FULLSCREEN, value);
+  }
+
+  static getCustomScreenLightness(): boolean {
+    return SettingsService.store.getBoolean(KEY_CUSTOM_SCREEN_LIGHTNESS, false);
+  }
+
+  static setCustomScreenLightness(value: boolean): void {
+    SettingsService.store.putBoolean(KEY_CUSTOM_SCREEN_LIGHTNESS, value);
+  }
+
+  /** Screen lightness 0–200. Default 100. */
+  static getScreenLightness(): number {
+    return clamp(SettingsService.store.getNumber(KEY_SCREEN_LIGHTNESS, 100), 0, 200);
+  }
+
+  static setScreenLightness(value: number): void {
+    SettingsService.store.putNumber(KEY_SCREEN_LIGHTNESS, clamp(value, 0, 200));
+  }
+
+  /** Page scaling: 0=Fit, 1=Width, 2=Height, 3=Fill. Default: Fit (0). */
+  static getPageScaling(): number {
+    return clamp(SettingsService.store.getNumber(KEY_PAGE_SCALING, 0), 0, 3);
+  }
+
+  static setPageScaling(value: number): void {
+    SettingsService.store.putNumber(KEY_PAGE_SCALING, clamp(value, 0, 3));
+  }
+
+  /** Start position: 0=Top, 1=Center. Default: Top (0). */
+  static getStartPosition(): number {
+    return clamp(SettingsService.store.getNumber(KEY_START_POSITION, 0), 0, 1);
+  }
+
+  static setStartPosition(value: number): void {
+    SettingsService.store.putNumber(KEY_START_POSITION, clamp(value, 0, 1));
   }
 
   /**

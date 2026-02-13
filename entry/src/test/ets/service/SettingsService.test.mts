@@ -295,6 +295,129 @@ describe('SettingsService', () => {
     });
   });
 
+  // ---- Reading settings ----
+
+  describe('readingDirection', () => {
+    it('should default to 0 (LTR)', () => {
+      assert.strictEqual(SettingsService.getReadingDirection(), 0);
+    });
+
+    it('should persist RTL direction', () => {
+      SettingsService.setReadingDirection(1);
+      assert.strictEqual(SettingsService.getReadingDirection(), 1);
+    });
+
+    it('should persist vertical direction', () => {
+      SettingsService.setReadingDirection(2);
+      assert.strictEqual(SettingsService.getReadingDirection(), 2);
+    });
+
+    it('should clamp to valid range', () => {
+      SettingsService.setReadingDirection(-1);
+      assert.strictEqual(SettingsService.getReadingDirection(), 0);
+      SettingsService.setReadingDirection(5);
+      assert.strictEqual(SettingsService.getReadingDirection(), 2);
+    });
+  });
+
+  describe('keepScreenOn', () => {
+    it('should default to false', () => {
+      assert.strictEqual(SettingsService.getKeepScreenOn(), false);
+    });
+
+    it('should persist', () => {
+      SettingsService.setKeepScreenOn(true);
+      assert.strictEqual(SettingsService.getKeepScreenOn(), true);
+    });
+  });
+
+  describe('showProgress', () => {
+    it('should default to true', () => {
+      assert.strictEqual(SettingsService.getShowProgress(), true);
+    });
+
+    it('should persist', () => {
+      SettingsService.setShowProgress(false);
+      assert.strictEqual(SettingsService.getShowProgress(), false);
+    });
+  });
+
+  describe('volumePage', () => {
+    it('should default to false', () => {
+      assert.strictEqual(SettingsService.getVolumePage(), false);
+    });
+
+    it('should persist', () => {
+      SettingsService.setVolumePage(true);
+      assert.strictEqual(SettingsService.getVolumePage(), true);
+    });
+  });
+
+  describe('readingFullscreen', () => {
+    it('should default to true', () => {
+      assert.strictEqual(SettingsService.getReadingFullscreen(), true);
+    });
+
+    it('should persist', () => {
+      SettingsService.setReadingFullscreen(false);
+      assert.strictEqual(SettingsService.getReadingFullscreen(), false);
+    });
+  });
+
+  describe('screenLightness', () => {
+    it('should default to 100', () => {
+      assert.strictEqual(SettingsService.getScreenLightness(), 100);
+    });
+
+    it('should clamp to 0–200', () => {
+      SettingsService.setScreenLightness(-10);
+      assert.strictEqual(SettingsService.getScreenLightness(), 0);
+      SettingsService.setScreenLightness(300);
+      assert.strictEqual(SettingsService.getScreenLightness(), 200);
+    });
+
+    it('should persist valid value', () => {
+      SettingsService.setScreenLightness(150);
+      assert.strictEqual(SettingsService.getScreenLightness(), 150);
+    });
+  });
+
+  describe('pageScaling', () => {
+    it('should default to 0 (Fit)', () => {
+      assert.strictEqual(SettingsService.getPageScaling(), 0);
+    });
+
+    it('should clamp to valid range', () => {
+      SettingsService.setPageScaling(-1);
+      assert.strictEqual(SettingsService.getPageScaling(), 0);
+      SettingsService.setPageScaling(10);
+      assert.strictEqual(SettingsService.getPageScaling(), 3);
+    });
+
+    it('should persist', () => {
+      SettingsService.setPageScaling(2);
+      assert.strictEqual(SettingsService.getPageScaling(), 2);
+    });
+  });
+
+  describe('startPosition', () => {
+    it('should default to 0 (Top)', () => {
+      assert.strictEqual(SettingsService.getStartPosition(), 0);
+    });
+
+    it('should clamp to valid range', () => {
+      SettingsService.setStartPosition(-1);
+      assert.strictEqual(SettingsService.getStartPosition(), 0);
+      SettingsService.setStartPosition(5);
+      assert.strictEqual(SettingsService.getStartPosition(), 1);
+    });
+
+    it('should persist', () => {
+      SettingsService.setStartPosition(1);
+      assert.strictEqual(SettingsService.getStartPosition(), 1);
+    });
+  });
+
   // ---- resetDefaults ----
 
   describe('resetDefaults', () => {
