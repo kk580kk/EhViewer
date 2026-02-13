@@ -130,8 +130,13 @@ describe('Exception hierarchy', () => {
       assert.ok(e instanceof Error);
     });
 
-    it('should have fixed message "OFFENSIVE"', () => {
+    it('should have default message "OFFENSIVE" when no message given', () => {
       assert.strictEqual(new OffensiveException().message, 'OFFENSIVE');
+    });
+
+    it('should use custom message when provided', () => {
+      const msg = '敏感内容';
+      assert.strictEqual(new OffensiveException(msg).message, msg);
     });
 
     it('should have correct name', () => {

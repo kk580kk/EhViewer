@@ -12,11 +12,11 @@
 import { EhException } from './EhException.ets';
 
 /**
- * Thrown when the server flags content as offensive on g.e-hentai.org.
+ * 敏感内容异常。当页面返回 offensive 提示（如 g.e-hentai.org 的敏感内容警告）时抛出。
  */
 export class OffensiveException extends EhException {
-  constructor() {
-    super('OFFENSIVE');
+  constructor(message?: string) {
+    super(message ?? 'OFFENSIVE');
     this.name = 'OffensiveException';
   }
 }
