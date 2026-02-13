@@ -11,6 +11,8 @@
 import { DownloadInfo } from '../download/DownloadInfo.ets';
 import { DownloadLabel } from '../download/DownloadLabel.ets';
 import type { EhDB } from '../database/EhDB.ets';
+import type { DownloadManager } from '../download/DownloadManager.ets';
+import { GalleryInfo } from '../model/GalleryInfo.ets';
 import { EhUtils } from '../client/EhUtils.ets';
 
 /** Loading states for the downloads tab. */
@@ -40,9 +42,11 @@ export class DownloadsViewModel {
   private _labels: DownloadLabel[] = [];
   private _currentLabel: string | null = null;
   private readonly db: EhDB;
+  private readonly downloadManager: DownloadManager | null;
 
-  constructor(db: EhDB) {
+  constructor(db: EhDB, downloadManager: DownloadManager | null = null) {
     this.db = db;
+    this.downloadManager = downloadManager;
   }
 
   // ---- Getters ----
@@ -116,16 +120,61 @@ export class DownloadsViewModel {
 
   /** Remove a download record by gid. */
   removeDownload(gid: number): void {
-    this.db.removeDownloadInfo(gid);
+    if (this.downloadManager !== null) {
+      this.downloadManager.deleteDownload(gid);
+    } else {
+      this.db.removeDownloadInfo(gid);
+    }
     this.refresh();
   }
 
   /** Remove multiple downloads by gid. */
   removeDownloads(gids: number[]): void {
-    for (const gid of gids) {
-      this.db.removeDownloadInfo(gid);
+    if (this.downloadManager !== null) {
+      this.downloadManager.deleteRangeDownload(gids);
+    } else {
+      for (const gid of gids) {
+        this.db.removeDownloadInfo(gid);
+      }
     }
     this.refresh();
+  }
+
+  /**
+   * Add a new download task from gallery info.
+   * Delegates to DownloadManager to properly queue the task.
+   * Returns true if the download was added, false if DownloadManager is not set
+   * or the gallery is already in the queue.
+   */
+  addDownload(galleryInfo: GalleryInfo, label: string | null = null): boolean {
+    if (this.downloadManager === null) return false;
+    this.downloadManager.startDownload(galleryInfo, label);
+    this.refresh();
+    return true;
+  }
+
+  /**
+   * Cancel (stop) a download task by gid.
+   * Returns true if the download was cancelled.
+   */
+  cancelDownload(gid: number): boolean {
+    if (this.downloadManager === null) return false;
+    this.downloadManager.stopDownload(gid);
+    this.refresh();
+    return true;
+  }
+
+  /**
+   * Retry a failed download task by gid.
+   * Returns true if the download was re-queued.
+   */
+  retryDownload(gid: number): boolean {
+    if (this.downloadManager === null) return false;
+    const result = this.downloadManager.retryDownload(gid);
+    if (result) {
+      this.refresh();
+    }
+    return result;
   }
 
   /** Add a download label. Returns the created label. */

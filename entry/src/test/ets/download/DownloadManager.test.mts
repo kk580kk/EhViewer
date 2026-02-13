@@ -268,6 +268,73 @@ describe('DownloadManager', () => {
   });
 
   // =========================================================================
+  // retryDownload
+  // =========================================================================
+
+  describe('retryDownload', () => {
+    it('should retry a FAILED download', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.onDownloadFinished(5, 10, 10); // fails with legacy=5
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_FAILED);
+
+      const result = mgr.retryDownload(1);
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should retry a NONE download', () => {
+      mgr.addDownload(makeGallery(1));
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_NONE);
+
+      const result = mgr.retryDownload(1);
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should return false for unknown gid', () => {
+      assert.strictEqual(mgr.retryDownload(999), false);
+    });
+
+    it('should return false for already downloading task', () => {
+      mgr.startDownload(makeGallery(1));
+      assert.strictEqual(mgr.retryDownload(1), false);
+    });
+
+    it('should return false for WAIT state', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.startDownload(makeGallery(2));
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_WAIT);
+      assert.strictEqual(mgr.retryDownload(2), false);
+    });
+
+    it('should queue behind current task', () => {
+      mgr.startDownload(makeGallery(1));
+      mgr.addDownload(makeGallery(2));
+      mgr.retryDownload(2);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_WAIT);
+    });
+
+    it('should fire onUpdate listener', () => {
+      const spy = new SpyInfoListener();
+      mgr.addDownloadInfoListener(spy);
+      mgr.addDownload(makeGallery(1));
+      spy.updateCalls = []; // reset
+      mgr.retryDownload(1);
+      // Should fire at least one update (for WAIT transition + ensureDownload DOWNLOAD transition)
+      assert.ok(spy.updateCalls.length >= 1);
+      assert.strictEqual(spy.updateCalls[0].gid, 1);
+    });
+
+    it('should persist state to DB', () => {
+      mgr.addDownload(makeGallery(1));
+      mgr.retryDownload(1);
+      const stored = db.getAllDownloadInfo();
+      assert.ok(stored[0].state === DownloadInfo.STATE_DOWNLOAD || stored[0].state === DownloadInfo.STATE_WAIT);
+    });
+  });
+
+  // =========================================================================
   // startAllDownload / startRangeDownload
   // =========================================================================
 

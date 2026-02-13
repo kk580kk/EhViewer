@@ -320,6 +320,39 @@ export class DownloadManager {
     }
   }
 
+  /**
+   * Retry a single failed or idle download by gid.
+   * Returns true if the download was found and re-queued.
+   */
+  retryDownload(gid: number): boolean {
+    const info = this.allInfoMap.get(gid);
+    if (info === undefined) return false;
+
+    // Already active
+    if (this.currentTask !== null && this.currentTask.gid === gid) return false;
+    if (info.state === DownloadInfo.STATE_WAIT) return false;
+
+    // Only retry NONE, FAILED, or FINISH
+    if (info.state !== DownloadInfo.STATE_NONE &&
+        info.state !== DownloadInfo.STATE_FAILED &&
+        info.state !== DownloadInfo.STATE_FINISH) {
+      return false;
+    }
+
+    info.state = DownloadInfo.STATE_WAIT;
+    this.waitList.push(info);
+    this.db.putDownloadInfo(info);
+
+    const list = this.getInfoListForLabel(info.label);
+    if (list !== null) {
+      for (const l of this.downloadInfoListeners) {
+        l.onUpdate(info, list);
+      }
+    }
+    this.ensureDownload();
+    return true;
+  }
+
   /** Re-queue all NONE / FAILED downloads. */
   startAllDownload(): void {
     let updated = false;

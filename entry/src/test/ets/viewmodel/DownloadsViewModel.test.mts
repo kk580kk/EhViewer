@@ -2,10 +2,11 @@ import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
 import { DownloadsViewModel, DownloadsState } from '../../../main/ets/viewmodel/DownloadsViewModel.ets';
 import { MemoryEhDB } from '../../../main/ets/database/MemoryEhDB.ets';
+import { DownloadManager } from '../../../main/ets/download/DownloadManager.ets';
 import { DownloadInfo } from '../../../main/ets/download/DownloadInfo.ets';
 import { GalleryInfo } from '../../../main/ets/model/GalleryInfo.ets';
 
-function makeDownload(gid: number, title: string, state: number = DownloadInfo.STATE_NONE, label: string | null = null): DownloadInfo {
+function makeGallery(gid: number, title: string = `Gallery ${gid}`): GalleryInfo {
   const gi = new GalleryInfo();
   gi.gid = gid;
   gi.token = `tok_${gid}`;
@@ -13,7 +14,11 @@ function makeDownload(gid: number, title: string, state: number = DownloadInfo.S
   gi.category = 2;
   gi.uploader = 'test_user';
   gi.rating = 4.0;
-  const di = new DownloadInfo(gi);
+  return gi;
+}
+
+function makeDownload(gid: number, title: string, state: number = DownloadInfo.STATE_NONE, label: string | null = null): DownloadInfo {
+  const di = new DownloadInfo(makeGallery(gid, title));
   di.state = state;
   di.time = Date.now() + gid; // ensure ordering
   di.label = label;
@@ -221,6 +226,145 @@ describe('DownloadsViewModel', () => {
       assert.strictEqual(DownloadsViewModel.canStop(makeDownload(2, 'X', DownloadInfo.STATE_DOWNLOAD)), true);
       assert.strictEqual(DownloadsViewModel.canStop(makeDownload(3, 'X', DownloadInfo.STATE_NONE)), false);
       assert.strictEqual(DownloadsViewModel.canStop(makeDownload(4, 'X', DownloadInfo.STATE_FINISH)), false);
+    });
+  });
+
+  // =========================================================================
+  // Download task operations (with DownloadManager)
+  // =========================================================================
+
+  describe('addDownload (via DownloadManager)', () => {
+    let mgr: DownloadManager;
+    let vmWithMgr: DownloadsViewModel;
+
+    beforeEach(() => {
+      // Use shared MemoryEhDB as both EhDB and DownloadDB
+      mgr = new DownloadManager(db);
+      vmWithMgr = new DownloadsViewModel(db, mgr);
+    });
+
+    it('should add and start a new download', () => {
+      const result = vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.containDownloadInfo(1), true);
+      vmWithMgr.load();
+      assert.strictEqual(vmWithMgr.count, 1);
+    });
+
+    it('should return false when DownloadManager is not set', () => {
+      // vm has no DownloadManager
+      assert.strictEqual(vm.addDownload(makeGallery(1)), false);
+    });
+
+    it('should assign label when adding download', () => {
+      mgr.addLabel('Comics');
+      vmWithMgr.addDownload(makeGallery(1, 'Test'), 'Comics');
+      const info = mgr.getDownloadInfo(1);
+      assert.ok(info !== null);
+      assert.strictEqual(info!.label, 'Comics');
+    });
+  });
+
+  describe('cancelDownload (via DownloadManager)', () => {
+    let mgr: DownloadManager;
+    let vmWithMgr: DownloadsViewModel;
+
+    beforeEach(() => {
+      mgr = new DownloadManager(db);
+      vmWithMgr = new DownloadsViewModel(db, mgr);
+    });
+
+    it('should stop a downloading task', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+
+      const result = vmWithMgr.cancelDownload(1);
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_NONE);
+    });
+
+    it('should stop a waiting task', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'First'));
+      vmWithMgr.addDownload(makeGallery(2, 'Second'));
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_WAIT);
+
+      vmWithMgr.cancelDownload(2);
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_NONE);
+    });
+
+    it('should return false when DownloadManager is not set', () => {
+      assert.strictEqual(vm.cancelDownload(1), false);
+    });
+  });
+
+  describe('retryDownload (via DownloadManager)', () => {
+    let mgr: DownloadManager;
+    let vmWithMgr: DownloadsViewModel;
+
+    beforeEach(() => {
+      mgr = new DownloadManager(db);
+      vmWithMgr = new DownloadsViewModel(db, mgr);
+    });
+
+    it('should retry a failed download', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      mgr.onDownloadFinished(5, 10, 10); // fails
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_FAILED);
+
+      const result = vmWithMgr.retryDownload(1);
+      assert.strictEqual(result, true);
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('should return false for non-existent gid', () => {
+      assert.strictEqual(vmWithMgr.retryDownload(999), false);
+    });
+
+    it('should return false when DownloadManager is not set', () => {
+      assert.strictEqual(vm.retryDownload(1), false);
+    });
+
+    it('should refresh items after retry', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      mgr.onDownloadFinished(5, 10, 10); // fails
+      vmWithMgr.load();
+      assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_FAILED);
+
+      vmWithMgr.retryDownload(1);
+      // After retry + refresh, state should be updated
+      assert.strictEqual(vmWithMgr.items[0].state, DownloadInfo.STATE_DOWNLOAD);
+    });
+  });
+
+  describe('removeDownload with DownloadManager', () => {
+    let mgr: DownloadManager;
+    let vmWithMgr: DownloadsViewModel;
+
+    beforeEach(() => {
+      mgr = new DownloadManager(db);
+      vmWithMgr = new DownloadsViewModel(db, mgr);
+    });
+
+    it('should stop and remove a downloading task', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'Test'));
+      vmWithMgr.addDownload(makeGallery(2, 'Test2'));
+      assert.strictEqual(mgr.getDownloadState(1), DownloadInfo.STATE_DOWNLOAD);
+
+      vmWithMgr.removeDownload(1);
+      assert.strictEqual(mgr.containDownloadInfo(1), false);
+      // Task 2 should be promoted
+      assert.strictEqual(mgr.getDownloadState(2), DownloadInfo.STATE_DOWNLOAD);
+    });
+
+    it('removeDownloads should batch-remove via DownloadManager', () => {
+      vmWithMgr.addDownload(makeGallery(1, 'A'));
+      vmWithMgr.addDownload(makeGallery(2, 'B'));
+      vmWithMgr.addDownload(makeGallery(3, 'C'));
+
+      vmWithMgr.removeDownloads([1, 3]);
+      assert.strictEqual(mgr.containDownloadInfo(1), false);
+      assert.strictEqual(mgr.containDownloadInfo(3), false);
+      assert.strictEqual(mgr.containDownloadInfo(2), true);
     });
   });
 });
