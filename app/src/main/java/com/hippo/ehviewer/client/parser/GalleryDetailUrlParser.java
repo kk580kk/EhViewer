@@ -48,6 +48,9 @@ public final class GalleryDetailUrlParser {
         Pattern pattern = strict ? URL_STRICT_PATTERN : URL_PATTERN;
         Matcher m = pattern.matcher(url);
         if (m.find()) {
+            if (!strict && m.end() < url.length() && isHex(url.charAt(m.end()))) {
+                return null;
+            }
             Result result = new Result();
             result.gid = NumberUtils.parseLongSafely(m.group(1), -1L);
             result.token = m.group(2);
@@ -58,6 +61,10 @@ public final class GalleryDetailUrlParser {
         } else {
             return null;
         }
+    }
+
+    private static boolean isHex(char c) {
+        return (c >= '0' && c <= '9') || (c >= 'a' && c <= 'f');
     }
 
     public static class Result {

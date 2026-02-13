@@ -71,4 +71,19 @@ public class GalleryDetailUrlParserTest {
       assertEquals(token, result.token);
     }
   }
+
+  @Test
+  public void testParseNullReturnsNull() {
+    assertNull(GalleryDetailUrlParser.parse(null));
+    assertNull(GalleryDetailUrlParser.parse(null, true));
+    assertNull(GalleryDetailUrlParser.parse(null, false));
+  }
+
+  @Test
+  public void testParseSingleArgDefaultsToStrict() {
+    GalleryDetailUrlParser.Result r = GalleryDetailUrlParser.parse("https://e-hentai.org/g/530350/8b3c7e4a21/");
+    assertEquals(530350, r.gid);
+    assertEquals("8b3c7e4a21", r.token);
+    assertNull(GalleryDetailUrlParser.parse("530350/8b3c7e4a21"));
+  }
 }
