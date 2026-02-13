@@ -103,6 +103,12 @@ export class DownloadManager {
    */
   onResumeDownload: ((info: DownloadInfo) => void) | null = null;
 
+  /**
+   * Optional hook called when an active task is cancelled/stopped.
+   * Production code will wire this to ImageDownloader.cancel().
+   */
+  onCancelDownload: ((info: DownloadInfo) => void) | null = null;
+
   constructor(db: DownloadDB) {
     this.db = db;
 
@@ -589,6 +595,10 @@ export class DownloadManager {
 
     const info = this.currentTasks[idx];
     this.currentTasks.splice(idx, 1);
+
+    if (this.onCancelDownload !== null) {
+      this.onCancelDownload(info);
+    }
 
     info.state = DownloadInfo.STATE_NONE;
     this.db.putDownloadInfo(info);
