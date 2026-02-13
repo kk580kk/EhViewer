@@ -17,8 +17,18 @@
 package com.hippo.ehviewer.client;
 
 import com.hippo.okhttp.ChromeRequestBuilder;
+import java.util.ArrayList;
+import java.util.List;
+import okhttp3.Request;
+import okhttp3.RequestBody;
 
+/**
+ * Builds GET/POST requests for the Eh HTTP client (OkHttp).
+ * Supports Header, Body, and Cookie injection.
+ */
 public class EhRequestBuilder extends ChromeRequestBuilder {
+
+    private final List<String> mCookies = new ArrayList<>();
 
     public EhRequestBuilder(String url, String referer) {
         this(url, referer, null);
@@ -32,5 +42,33 @@ public class EhRequestBuilder extends ChromeRequestBuilder {
         if (origin != null) {
             addHeader("Origin", origin);
         }
+    }
+
+    /** Explicit GET request (no body). */
+    public EhRequestBuilder get() {
+        return this;
+    }
+
+    /** POST with body. Returns this for chaining. */
+    @Override
+    public EhRequestBuilder post(RequestBody body) {
+        super.post(body);
+        return this;
+    }
+
+    /** Add a cookie to be sent in the Cookie header. */
+    public EhRequestBuilder addCookie(String name, String value) {
+        if (name != null && value != null) {
+            mCookies.add(name + "=" + value);
+        }
+        return this;
+    }
+
+    @Override
+    public Request build() {
+        if (!mCookies.isEmpty()) {
+            addHeader("Cookie", String.join("; ", mCookies));
+        }
+        return super.build();
     }
 }
