@@ -23,6 +23,8 @@ type RowData = Record<string, string | number | null>;
 export class MemoryDatabaseStore implements DatabaseStore {
   private tables: Map<string, RowData[]> = new Map();
   private nextRowId: Map<string, number> = new Map();
+  /** Maps table name → AUTOINCREMENT PK column name. */
+  private autoIncrementPK: Map<string, string> = new Map();
   private inTransaction = false;
   private closed = false;
 
@@ -38,6 +40,11 @@ export class MemoryDatabaseStore implements DatabaseStore {
         this.tables.set(table, []);
         this.nextRowId.set(table, 1);
       }
+      // Detect AUTOINCREMENT PK so insert() can auto-assign the column
+      const autoIncMatch = trimmed.match(/(\w+)\s+INTEGER\s+PRIMARY\s+KEY\s+AUTOINCREMENT/i);
+      if (autoIncMatch) {
+        this.autoIncrementPK.set(table, autoIncMatch[1]);
+      }
       return;
     }
 
@@ -47,6 +54,7 @@ export class MemoryDatabaseStore implements DatabaseStore {
       const table = dropMatch[1];
       this.tables.delete(table);
       this.nextRowId.delete(table);
+      this.autoIncrementPK.delete(table);
       return;
     }
 
@@ -63,6 +71,12 @@ export class MemoryDatabaseStore implements DatabaseStore {
     this.nextRowId.set(table, id + 1);
 
     const row: RowData = { _rowid: id, ...values };
+    // Simulate SQLite AUTOINCREMENT: if the PK column is absent from
+    // the VALUES, auto-assign it to the generated rowid.
+    const autoCol = this.autoIncrementPK.get(table);
+    if (autoCol && !(autoCol in values)) {
+      row[autoCol] = id;
+    }
     rows.push(row);
     return id;
   }
