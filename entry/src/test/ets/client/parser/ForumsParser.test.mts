@@ -21,6 +21,15 @@ describe('ForumsParser', () => {
     assert.strictEqual(url, 'https://forums.e-hentai.org/profile/1');
   });
 
+  it('should extract profile URL from forums page with table structure (Java fixture)', () => {
+    const body =
+      '<html>\n<body>\n<div id="userlinks">\n<table><tr><td>\n' +
+      '<a href="https://forums.e-hentai.org/index.php?showuser=12345">My Profile</a>\n' +
+      '</td></tr></table>\n</div>\n</body>\n</html>';
+    const url = ForumsParser.parse(body);
+    assert.strictEqual(url, 'https://forums.e-hentai.org/index.php?showuser=12345');
+  });
+
   it('should throw ParseException when userlinks div is missing', () => {
     assert.throws(
       () => ForumsParser.parse('<html><body>No userlinks</body></html>'),
