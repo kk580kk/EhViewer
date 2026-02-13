@@ -20,7 +20,7 @@ export class SignInParser {
   static parse(body: string): string {
     let m = NAME_PATTERN.exec(body);
     if (m) {
-      return m[1];
+      return m[1].trim();
     }
     m = ERROR_PATTERN.exec(body);
     if (m) {

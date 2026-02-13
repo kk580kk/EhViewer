@@ -17,6 +17,12 @@ describe('SignInParser', () => {
     assert.strictEqual(name, 'User_123-abc');
   });
 
+  it('should trim whitespace from display name', () => {
+    const body = '<p>You are now logged in as:  SpacedUser  </p>';
+    const name = SignInParser.parse(body);
+    assert.strictEqual(name, 'SpacedUser');
+  });
+
   it('should throw EhException for error response with h4 format', () => {
     const body = '<h4>The error returned was:</h4>\n<p>The username or password is incorrect.</p>';
     assert.throws(

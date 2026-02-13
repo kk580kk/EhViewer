@@ -19,10 +19,11 @@ import { ParserUtils } from './ParserUtils';
 import { EhException } from '../exception/EhException.ets';
 import { ParseException } from '../exception/ParseException.ets';
 import { OffensiveException } from '../exception/OffensiveException.ets';
+import { PiningException } from '../exception/PiningException.ets';
 
 const PATTERN_ERROR = /<div class="d">\s*<p>([^<]+)<\/p>/;
 const PATTERN_DETAIL = /var gid = (\d+);[\s\S]*?var token = "([a-f0-9]+)";[\s\S]*?var apiuid = ([-\d]+);[\s\S]*?var apikey = "([a-f0-9]+)"/;
-const PATTERN_TORRENT = /<a[^<>]*onclick="return popUp\('([^']+)'[^)]+\)">Torrent Download \\( (\\d+) \\)<\/a>/;
+const PATTERN_TORRENT = /<a[^<>]*onclick="return popUp\('([^']+)'[^)]+\)">Torrent Download \( (\d+) \)<\/a>/;
 const PATTERN_ARCHIVE = /<a[^<>]*onclick="return popUp\('([^']+)'[^)]+\)">Archive Download<\/a>/;
 const PATTERN_COVER = /width:(\d+)px; height:(\d+)px[^;]*url\((.+?)\)/;
 const PATTERN_TAG_GROUP = /<tr><td[^<>]+>([\w\s]+):<\/td><td>(?:<div[^<>]+><a[^<>]+>[\w\s]+<\/a><\/div>)+<\/td><\/tr>/g;
@@ -34,6 +35,7 @@ const PATTERN_NORMAL_PREVIEW = /<div class="gdtm"[^<>]*><div[^<>]*width:(\d+)[^<
 const PATTERN_LARGE_PREVIEW = /<div class="gdtl"[\s\S]*?<a href="(.+?)"><img alt="([\d,]+)"[\s\S]*?src="(.+?)"/g;
 
 const OFFENSIVE_STRING = '<p>(And if you choose to ignore this warning, you lose all rights to complain about it in the future.)</p>';
+const PINING_STRING = '<p>This gallery is pining for the fjords.</p>';
 
 const WEB_COMMENT_DATE_FORMAT = /(\d{1,2})\s+(\w+)\s+(\d{4}),\s+(\d{1,2}):(\d{2})\s+(\w+)/;
 
@@ -125,6 +127,10 @@ export class GalleryDetailParser {
       throw new OffensiveException('Offensive content');
     }
 
+    if (body.includes(PINING_STRING)) {
+      throw new PiningException();
+    }
+
     const errorM = PATTERN_ERROR.exec(body);
     if (errorM) {
       throw new EhException(ParserUtils.trim(errorM[1]));
@@ -175,6 +181,12 @@ export class GalleryDetailParser {
 
     const postedM = /Posted[\s\S]*?<td[^>]*>([^<]*)</.exec(body);
     if (postedM) gd.posted = ParserUtils.trim(postedM[1]);
+
+    const parentM = /Parent[\s\S]*?<a[^>]*href="([^"]*)"/.exec(body);
+    if (parentM) gd.parent = ParserUtils.trim(parentM[1]);
+
+    const visibleM = /Visible[\s\S]*?<td[^>]*>([^<]*)</.exec(body);
+    if (visibleM) gd.visible = ParserUtils.trim(visibleM[1]);
 
     const lengthM = PATTERN_PAGES.exec(body);
     if (lengthM) {

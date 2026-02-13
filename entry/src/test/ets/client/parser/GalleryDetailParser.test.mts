@@ -4,14 +4,19 @@ import { GalleryDetailParser } from '../../../../main/ets/client/parser/GalleryD
 import { EhException } from '../../../../main/ets/client/exception/EhException.ets';
 import { ParseException } from '../../../../main/ets/client/exception/ParseException.ets';
 import { OffensiveException } from '../../../../main/ets/client/exception/OffensiveException.ets';
+import { PiningException } from '../../../../main/ets/client/exception/PiningException.ets';
 
 const DETAIL_BODY = `<html><body>
 <script>var gid = 12345;var token = "abcdef0123";var apiuid = 100;var apikey = "deadbeef01234567890abcdef0123456"</script>
+<a onclick="return popUp('https://e-hentai.org/gallerytorrents.php?gid=12345&amp;t=abcdef0123',620,350)">Torrent Download ( 3 )</a>
+<a onclick="return popUp('https://e-hentai.org/archiver.php?gid=12345&amp;token=abcdef0123&amp;or=abc123',480,320)">Archive Download</a>
 <div id="gn">Test Gallery Title</div>
 <div id="gj">テストギャラリー</div>
 <div id="gdc"><div class="cn">Doujinshi</div></div>
 <div id="gdn">testuser</div>
 <tr><td class="gdt1">Posted:</td><td class="gdt2">2024-01-15 12:00</td></tr>
+<tr><td class="gdt1">Parent:</td><td class="gdt2"><a href="https://e-hentai.org/g/11111/aaaaaaaaaa/">https://e-hentai.org/g/11111/aaaaaaaaaa/</a></td></tr>
+<tr><td class="gdt1">Visible:</td><td class="gdt2">Yes</td></tr>
 <tr><td class="gdt1">Length:</td><td class="gdt2">25 pages</td></tr>
 <tr><td class="gdt1">Favorited:</td><td class="gdt2">42 times</td></tr>
 <tr><td class="gdt1">Language:</td><td class="gdt2">English</td></tr>
@@ -25,6 +30,8 @@ const DETAIL_BODY = `<html><body>
 </body></html>`;
 
 const OFFENSIVE_BODY = '<html><body><p>(And if you choose to ignore this warning, you lose all rights to complain about it in the future.)</p></body></html>';
+
+const PINING_BODY = '<html><body><p>This gallery is pining for the fjords.</p></body></html>';
 
 const ERROR_BODY = '<html><body><div class="d"><p>This gallery has been removed.</p></div></body></html>';
 
@@ -60,10 +67,38 @@ describe('GalleryDetailParser', () => {
       assert.strictEqual(gd.isFavorited, false);
     });
 
+    it('should parse torrent URL and count', () => {
+      const gd = GalleryDetailParser.parse(DETAIL_BODY);
+      assert.strictEqual(gd.torrentCount, 3);
+      assert.ok(gd.torrentUrl.includes('gallerytorrents.php'));
+    });
+
+    it('should parse archive URL', () => {
+      const gd = GalleryDetailParser.parse(DETAIL_BODY);
+      assert.ok(gd.archiveUrl.includes('archiver.php'));
+    });
+
+    it('should parse parent URL', () => {
+      const gd = GalleryDetailParser.parse(DETAIL_BODY);
+      assert.strictEqual(gd.parent, 'https://e-hentai.org/g/11111/aaaaaaaaaa/');
+    });
+
+    it('should parse visible field', () => {
+      const gd = GalleryDetailParser.parse(DETAIL_BODY);
+      assert.strictEqual(gd.visible, 'Yes');
+    });
+
     it('should throw OffensiveException for offensive content', () => {
       assert.throws(
         () => GalleryDetailParser.parse(OFFENSIVE_BODY),
         (err: Error) => err instanceof OffensiveException,
+      );
+    });
+
+    it('should throw PiningException for pining content', () => {
+      assert.throws(
+        () => GalleryDetailParser.parse(PINING_BODY),
+        (err: Error) => err instanceof PiningException,
       );
     });
 
