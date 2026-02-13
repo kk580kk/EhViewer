@@ -32,11 +32,18 @@ public class ProfileParser {
     public static Result parse(String body) throws ParseException {
         try {
             Result result = new Result();
-            Document d = Jsoup.parse(body);
+            Document d = Jsoup.parse(body, EhUrl.URL_FORUMS);
             Element profilename = d.getElementById("profilename");
-            result.displayName = profilename.child(0).text();
+            if (profilename == null) {
+                throw new ParseException("Parse profile error", body);
+            }
+            result.displayName = profilename.children().isEmpty()
+                    ? "" : profilename.child(0).text();
             try {
-                result.avatar = profilename.nextElementSibling().nextElementSibling().child(0).attr("src");
+                Element img = profilename.select("img").first();
+                if (img != null) {
+                    result.avatar = img.attr("src");
+                }
                 if (TextUtils.isEmpty(result.avatar)) {
                     result.avatar = null;
                 } else if (!result.avatar.startsWith("http")) {
@@ -47,9 +54,11 @@ public class ProfileParser {
                 Log.i(TAG, "No avatar");
             }
             return result;
+        } catch (ParseException e) {
+            throw e;
         } catch (Throwable e) {
             ExceptionUtils.throwIfFatal(e);
-            throw new ParseException("Parse forums error", body);
+            throw new ParseException("Parse profile error", body);
         }
     }
 
