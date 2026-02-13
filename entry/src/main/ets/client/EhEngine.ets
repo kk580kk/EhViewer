@@ -9,10 +9,11 @@
  *     http://www.apache.org/licenses/LICENSE-2.0
  */
 
-import type { HttpClient, KV } from '../network/HttpClient.ets';
+import type { HttpClient, KV, MultipartPart } from '../network/HttpClient.ets';
 import { buildEhHeaders } from '../network/HttpClient.ets';
 import { EhUrl } from './EhUrl.ets';
 import { EhException } from './exception/EhException.ets';
+import { NoHAtHClientException } from './exception/NoHAtHClientException.ets';
 import { EhSignIn } from './EhSignIn.ets';
 import { GalleryListParser } from './parser/GalleryListParser.ets';
 import type { GalleryListResult } from './parser/GalleryListParser.ets';
@@ -25,6 +26,10 @@ import { RateGalleryParser } from './parser/RateGalleryParser.ets';
 import { VoteCommentParser } from './parser/VoteCommentParser.ets';
 import { FavoritesParser } from './parser/FavoritesParser.ets';
 import type { FavoritesResult } from './parser/FavoritesParser.ets';
+import { TorrentParser } from './parser/TorrentParser.ets';
+import type { TorrentItem } from './parser/TorrentParser.ets';
+import { ArchiveParser } from './parser/ArchiveParser.ets';
+import type { ArchiveResult } from './parser/ArchiveParser.ets';
 import type { ProfileResult } from './parser/ProfileParser.ets';
 import type { GalleryPageResult } from './parser/GalleryPageParser.ets';
 import type { GalleryPageApiResult } from './parser/GalleryPageApiParser.ets';
@@ -33,10 +38,11 @@ import type { VoteCommentResult } from './parser/VoteCommentParser.ets';
 import { GalleryInfo } from '../model/GalleryInfo';
 import { GalleryDetail } from '../model/GalleryDetail';
 import { GalleryCommentList } from '../model/GalleryComment';
+import type { PreviewSet } from '../model/PreviewSet';
 
-const SAD_PANDA_DISPOSITION = 'inline; filename="sadpanda.jpg"';
 const KOKOMADE_URL = 'https://exhentai.org/img/kokomade.jpg';
 const MAX_API_BATCH = 25;
+const PATTERN_NEED_HATH_CLIENT = /You must have a H@H client assigned to your account to use this feature\./;
 
 function checkBodyAndThrow(body: string, _headers?: Record<string, string>): void {
   if (body.includes(KOKOMADE_URL)) {
@@ -321,6 +327,96 @@ export class EhEngine {
     const response = await this.httpClient.postForm(url, fields, buildEhHeaders(url, origin));
     checkBodyAndThrow(response.body);
     const result = FavoritesParser.parse(response.body);
+    for (const info of result.galleryInfoList) {
+      info.thumb = EhUrl.getFixedPreviewThumbUrl(info.thumb);
+    }
+    return result;
+  }
+
+  /** Get preview set and preview page count from a gallery detail page. */
+  async getPreviewSet(
+    url: string
+  ): Promise<{ previewSet: PreviewSet; previewPages: number }> {
+    const referer = EhUrl.getReferer();
+    const response = await this.httpClient.get(url, buildEhHeaders(referer));
+    checkBodyAndThrow(response.body);
+    const previewSet = GalleryDetailParser.parsePreviewSet(response.body);
+    const previewPages = GalleryDetailParser.parsePreviewPages(response.body);
+    return { previewSet, previewPages };
+  }
+
+  /** Get torrent list for a gallery. */
+  async getTorrentList(
+    url: string,
+    gid: number,
+    token: string
+  ): Promise<TorrentItem[]> {
+    const referer = EhUrl.getGalleryDetailUrl(gid, token);
+    const response = await this.httpClient.get(url, buildEhHeaders(referer));
+    checkBodyAndThrow(response.body);
+    return TorrentParser.parse(response.body);
+  }
+
+  /** Get archive list for a gallery. */
+  async getArchiveList(
+    url: string,
+    gid: number,
+    token: string
+  ): Promise<ArchiveResult> {
+    const referer = EhUrl.getGalleryDetailUrl(gid, token);
+    const response = await this.httpClient.get(url, buildEhHeaders(referer));
+    checkBodyAndThrow(response.body);
+    return ArchiveParser.parse(response.body);
+  }
+
+  /** Initiate an archive download. */
+  async downloadArchive(
+    gid: number,
+    token: string,
+    or_: string,
+    res: string
+  ): Promise<void> {
+    if (!or_ || or_.length === 0) {
+      throw new EhException('Invalid form param or: ' + or_);
+    }
+    if (!res || res.length === 0) {
+      throw new EhException('Invalid res: ' + res);
+    }
+    const url = EhUrl.getDownloadArchive(gid, token, or_);
+    const referer = EhUrl.getGalleryDetailUrl(gid, token);
+    const origin = EhUrl.getOrigin();
+    const fields: KV[] = [{ key: 'hathdl_xres', value: res }];
+    const response = await this.httpClient.postForm(url, fields, buildEhHeaders(referer, origin));
+    checkBodyAndThrow(response.body);
+    if (PATTERN_NEED_HATH_CLIENT.test(response.body)) {
+      throw new NoHAtHClientException('You must have a H@H client assigned to your account to use this feature.');
+    }
+  }
+
+  /** Search galleries by image. */
+  async imageSearch(
+    imageData: Uint8Array,
+    uss: boolean,
+    osc: boolean,
+    se: boolean
+  ): Promise<GalleryListResult> {
+    const parts: MultipartPart[] = [
+      { name: 'sfile', filename: 'a.jpg', contentType: 'image/jpeg', data: imageData },
+    ];
+    if (uss) parts.push({ name: 'fs_similar', data: 'on' });
+    if (osc) parts.push({ name: 'fs_covers', data: 'on' });
+    if (se) parts.push({ name: 'fs_exp', data: 'on' });
+    parts.push({ name: 'f_sfile', data: 'File Search' });
+
+    const url = EhUrl.getImageSearchUrl();
+    const referer = EhUrl.getReferer();
+    const origin = EhUrl.getOrigin();
+    const response = await this.httpClient.postMultipart(url, parts, buildEhHeaders(referer, origin));
+    checkBodyAndThrow(response.body);
+    const result = GalleryListParser.parse(response.body);
+    if (result.galleryInfoList.length > 0) {
+      await this.fillGalleryListByApi(result.galleryInfoList, url);
+    }
     for (const info of result.galleryInfoList) {
       info.thumb = EhUrl.getFixedPreviewThumbUrl(info.thumb);
     }

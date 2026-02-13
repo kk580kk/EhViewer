@@ -239,4 +239,15 @@ export class GalleryDetailParser {
     const hasMore = body.includes('click to show all');
     return GalleryCommentList.of(comments, hasMore);
   }
+
+  /** Parse preview set from a gallery detail page body. */
+  static parsePreviewSet(body: string): LargePreviewSet | NormalPreviewSet {
+    return parsePreviewSet(body);
+  }
+
+  /** Parse total preview pages from a gallery detail page body. */
+  static parsePreviewPages(body: string): number {
+    const m = PATTERN_PREVIEW_PAGES.exec(body);
+    return m ? ParserUtils.parseInt(m[1], 0) : 0;
+  }
 }
