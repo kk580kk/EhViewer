@@ -10,21 +10,26 @@
 
 import type { GalleryProvider2 } from '../gallery/GalleryProvider2';
 import type { GalleryProviderListener } from '../gallery/GalleryProvider';
+import { GallerySource } from '../gallery/GallerySource';
+import type { ReaderState } from '../gallery/ReaderState';
+import { MutableReaderState } from '../gallery/ReaderState';
 
 /** Reading direction / layout mode. */
-export const enum ReadingMode {
-  LEFT_TO_RIGHT = 0,
-  RIGHT_TO_LEFT = 1,
-  TOP_TO_BOTTOM = 2,
-}
+export type ReadingMode = typeof ReadingMode[keyof typeof ReadingMode];
+export const ReadingMode = {
+  LEFT_TO_RIGHT: 0,
+  RIGHT_TO_LEFT: 1,
+  TOP_TO_BOTTOM: 2,
+} as const;
 
 /** State of a single page in the reader. */
-export const enum PageState {
-  WAITING = 0,
-  LOADING = 1,
-  READY = 2,
-  FAILED = 3,
-}
+export type PageState = typeof PageState[keyof typeof PageState];
+export const PageState = {
+  WAITING: 0,
+  LOADING: 1,
+  READY: 2,
+  FAILED: 3,
+} as const;
 
 /** Information about a single page's state. */
 export interface PageInfo {
@@ -53,6 +58,7 @@ export class GalleryReaderViewModel implements GalleryProviderListener {
   private _pageStates: Map<number, PageInfo> = new Map();
   private _started: boolean = false;
   private _onChange: (() => void) | null = null;
+  private _readerState: MutableReaderState = new MutableReaderState(GallerySource.EH);
 
   // ---- Getters ----
 
@@ -80,6 +86,14 @@ export class GalleryReaderViewModel implements GalleryProviderListener {
     return this._provider;
   }
 
+  /**
+   * Read-only view of the current gallery source and page index.
+   * Suitable for use by the reading page and navigation bar.
+   */
+  get readerState(): ReaderState {
+    return this._readerState;
+  }
+
   /** Progress text like "5 / 100". */
   get progressText(): string {
     if (this._totalPages <= 0) return '';
@@ -103,13 +117,18 @@ export class GalleryReaderViewModel implements GalleryProviderListener {
 
   /**
    * Attach a gallery provider and start reading.
+   *
+   * @param provider  the gallery data source
+   * @param source    which kind of gallery (EH, DIR, ARCHIVE)
+   * @param startPage 0-based page to begin reading from
    */
-  start(provider: GalleryProvider2, startPage: number = 0): void {
+  start(provider: GalleryProvider2, source: GallerySource, startPage: number = 0): void {
     this._provider = provider;
     this._provider.addListener(this);
     this._provider.start();
     this._started = true;
     this._currentPage = startPage;
+    this._readerState = new MutableReaderState(source, startPage);
 
     const size = this._provider.size();
     if (size > 0) {
@@ -158,6 +177,7 @@ export class GalleryReaderViewModel implements GalleryProviderListener {
   goToPage(page: number): void {
     if (page < 0 || (this._totalPages > 0 && page >= this._totalPages)) return;
     this._currentPage = page;
+    this._readerState.setCurrentIndex(page);
     this.requestPage(page);
     this._provider?.putStartPage(page);
     this.notifyChange();
