@@ -62,6 +62,8 @@ public class GalleryPreview implements Parcelable {
 
     protected GalleryPreview(Parcel in) {
         this.imageUrl = in.readString();
+        this.imageKey = imageUrl != null && imageUrl.contains("/")
+                ? imageUrl.substring(imageUrl.indexOf('/') + 1) : imageUrl;
         this.pageUrl = in.readString();
         this.position = in.readInt();
         this.offsetX = in.readInt();
