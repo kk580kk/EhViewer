@@ -29,17 +29,27 @@ public class SignInParser {
             "(?:<h4>The error returned was:</h4>\\s*<p>(.+?)</p>)"
                     + "|(?:<span class=\"postcolor\">(.+?)</span>)");
 
-    public static String parse(String body) throws Exception {
+    /**
+     * Parses sign-in response body. On success returns the logged-in username.
+     *
+     * @param body HTML response body from sign-in request
+     * @return display name of the logged-in user
+     * @throws EhException    when the site returns a known error (e.g. wrong password, wrong captcha)
+     * @throws ParseException when the body cannot be parsed
+     */
+    public static String parse(String body) throws ParseException, EhException {
+        if (body == null || body.isEmpty()) {
+            throw new ParseException("Can't parse sign in", body == null ? "null" : "");
+        }
         Matcher m = NAME_PATTERN.matcher(body);
         if (m.find()) {
-            return m.group(1);
-        } else {
-            m = ERROR_PATTERN.matcher(body);
-            if (m.find()) {
-                throw new EhException(m.group(1) == null ? m.group(2) : m.group(1));
-            } else {
-                throw new ParseException("Can't parse sign in", body);
-            }
+            return m.group(1).trim();
         }
+        m = ERROR_PATTERN.matcher(body);
+        if (m.find()) {
+            String msg = m.group(1) != null ? m.group(1) : m.group(2);
+            throw new EhException(msg);
+        }
+        throw new ParseException("Can't parse sign in", body);
     }
 }
