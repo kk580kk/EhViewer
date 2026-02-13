@@ -18,6 +18,8 @@ package com.hippo.ehviewer.client;
 
 import android.content.Context;
 
+import androidx.annotation.NonNull;
+
 import com.hippo.network.CookieRepository;
 
 import java.util.ArrayList;
@@ -27,6 +29,11 @@ import java.util.List;
 import okhttp3.Cookie;
 import okhttp3.HttpUrl;
 
+/**
+ * Cookie store backed by the 01 Cookie layer (CookieRepository/CookieDatabase).
+ * Supports read/write by domain: use {@link #getCookiesForDomain(String)} to read
+ * and {@link #addCookie(Cookie)} to write (cookie domain determines storage).
+ */
 public class EhCookieStore extends CookieRepository {
 
     public static final String KEY_IPD_MEMBER_ID = "ipb_member_id";
@@ -44,6 +51,22 @@ public class EhCookieStore extends CookieRepository {
 
     public EhCookieStore(Context context) {
         super(context, "okhttp3-cookie.db");
+    }
+
+    /**
+     * Returns all cookies valid for the given domain (RFC 6265 domain-match).
+     * Caller can use this for domain-scoped read without building an HttpUrl.
+     */
+    @NonNull
+    public List<Cookie> getCookiesForDomain(String domain) {
+        if (domain == null || domain.isEmpty()) {
+            return Collections.emptyList();
+        }
+        HttpUrl url = HttpUrl.parse("https://" + domain + "/");
+        if (url == null) {
+            return Collections.emptyList();
+        }
+        return getCookies(url);
     }
 
     public void signOut() {
