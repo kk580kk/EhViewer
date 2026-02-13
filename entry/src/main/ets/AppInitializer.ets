@@ -21,6 +21,7 @@ import { EhConfigHolder } from './client/EhConfigHolder.ets';
 import { EhHttpClient } from './client/EhHttpClient.ets';
 import { SignInController } from './client/SignInController.ets';
 import { EhSignIn } from './client/EhSignIn.ets';
+import { EhClient } from './client/EhClient.ets';
 import type { DatabaseStore } from './database/DatabaseStore.ets';
 import type { HttpEngine } from './network/HttpClient.ets';
 
@@ -126,7 +127,7 @@ export class AppInitializer {
       status.database = false;
     }
 
-    // 4. Sign-in controller (shares the same HttpClient + CookieStore)
+    // 4. Sign-in controller + EhClient (shares the same HttpClient + CookieStore)
     try {
       if (EhHttpClient.isInitialized()) {
         const httpClient = EhHttpClient.getHttpClient();
@@ -135,6 +136,7 @@ export class AppInitializer {
           new EhSignIn(httpClient, cookieStore),
           cookieStore,
         );
+        EhClient.initialize(httpClient, cookieStore);
       }
       status.signIn = true;
     } catch {
@@ -170,6 +172,7 @@ export class AppInitializer {
     EhHttpClient.reset();
     EhConfigHolder.reset();
     SignInController.reset();
+    EhClient.reset();
   }
 
   /**

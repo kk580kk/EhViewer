@@ -16,7 +16,11 @@ import type { GalleryListFetcher, GalleryListResult } from '../viewmodel/Gallery
  * Use with GalleryListViewModel for real network list loading.
  */
 export class EhEngineGalleryListFetcher implements GalleryListFetcher {
-  constructor(private readonly engine: EhEngine) {}
+  readonly engine: EhEngine;
+
+  constructor(engine: EhEngine) {
+    this.engine = engine;
+  }
 
   async fetchList(url: string): Promise<GalleryListResult> {
     const result = await this.engine.getGalleryList(url, true);

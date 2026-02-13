@@ -18,7 +18,11 @@ import type { GalleryDetailFetcher } from '../viewmodel/GalleryDetailViewModel';
  * Use with GalleryDetailViewModel for real network detail loading.
  */
 export class EhEngineGalleryDetailFetcher implements GalleryDetailFetcher {
-  constructor(private readonly engine: EhEngine) {}
+  readonly engine: EhEngine;
+
+  constructor(engine: EhEngine) {
+    this.engine = engine;
+  }
 
   async fetchDetail(gid: number, token: string): Promise<GalleryDetail> {
     const url = EhUrl.getGalleryDetailUrl(gid, token);
