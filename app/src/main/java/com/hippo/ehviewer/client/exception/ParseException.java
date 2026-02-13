@@ -16,9 +16,15 @@
 
 package com.hippo.ehviewer.client.exception;
 
+/**
+ * Thrown when response body cannot be parsed (e.g. HTML/JSON structure unexpected).
+ * Carries the raw body for debugging via {@link #getBody()}.
+ */
 public class ParseException extends EhException {
 
-    private String mBody;
+    private static final long serialVersionUID = 1L;
+
+    private final String mBody;
 
     public ParseException(String detailMessage, String body) {
         super(detailMessage);
