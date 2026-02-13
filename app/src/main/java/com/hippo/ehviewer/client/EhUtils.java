@@ -23,9 +23,27 @@ import androidx.annotation.Nullable;
 import com.hippo.ehviewer.EhApplication;
 import com.hippo.ehviewer.Settings;
 import com.hippo.ehviewer.client.data.GalleryInfo;
+import java.util.Arrays;
+import java.util.Collections;
+import java.util.List;
 import java.util.regex.Pattern;
+import okhttp3.Request;
 
 public class EhUtils {
+
+    // --- Request headers (single source for EH requests) ---
+    public static final String USER_AGENT =
+            "Mozilla/5.0 (Windows NT 10.0; Win64; x64) "
+                    + "AppleWebKit/537.36 (KHTML, like Gecko) Chrome/71.0.3578.98 Safari/537.36";
+    public static final String ACCEPT_HEADER =
+            "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8";
+    public static final String ACCEPT_LANGUAGE_HEADER = "en-US,en;q=0.5";
+
+    /** Cookie names required for signed-in state. */
+    private static final List<String> REQUIRED_SIGN_IN_COOKIE_NAMES = Collections.unmodifiableList(
+            Arrays.asList(
+                    EhCookieStore.KEY_IPD_MEMBER_ID,
+                    EhCookieStore.KEY_IPD_PASS_HASH));
 
     public static final int NONE = -1; // Use it for homepage
     public static final int UNKNOWN = 0x400;
@@ -136,6 +154,37 @@ public class EhUtils {
 
     public static boolean needSignedIn(Context context) {
         return Settings.getNeedSignIn() && !EhApplication.getEhCookieStore(context).hasSignedIn();
+    }
+
+    /** Whether the user has valid sign-in cookies. */
+    public static boolean hasSignedIn(Context context) {
+        return EhApplication.getEhCookieStore(context).hasSignedIn();
+    }
+
+    /** Returns cookie names required for sign-in (ipb_member_id, ipb_pass_hash). */
+    public static List<String> getRequiredSignInCookieNames() {
+        return REQUIRED_SIGN_IN_COOKIE_NAMES;
+    }
+
+    /** Current site referer for request headers. */
+    public static String getReferer() {
+        return EhUrl.getReferer();
+    }
+
+    /** Current site origin for request headers. */
+    public static String getOrigin() {
+        return EhUrl.getOrigin();
+    }
+
+    /** Applies Referer and Origin to a request builder. Null values are skipped. */
+    public static void applyEhHeaders(Request.Builder builder,
+            @Nullable String referer, @Nullable String origin) {
+        if (referer != null) {
+            builder.addHeader("Referer", referer);
+        }
+        if (origin != null) {
+            builder.addHeader("Origin", origin);
+        }
     }
 
     public static String getSuitableTitle(GalleryInfo gi) {
