@@ -21,6 +21,9 @@
         "startWindowIcon": "$media:icon",
         "startWindowBackground": "$color:start_window_background",
         "exported": true,
+        "backgroundModes": [
+          "dataTransfer"
+        ],
         "skills": [
           {
             "name": "action.system.home",

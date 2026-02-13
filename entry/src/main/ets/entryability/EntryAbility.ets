@@ -18,6 +18,7 @@ import { AppInitializer } from '../AppInitializer.ets';
 import { OhosPreferencesStore } from '../preferences/OhosPreferencesStore.ets';
 import { MemoryDatabaseStore } from '../database/MemoryDatabaseStore.ets';
 import { createOhosHttpEngine } from '../network/OhosHttpEngine.ets';
+import { DownloadService } from '../download/DownloadService.ets';
 import http from '@ohos.net.http';
 import type { AppContextPaths } from '../AppConfig.ets';
 import type { ShareFsOps } from '../FileShareHelper.ets';
@@ -35,6 +36,9 @@ import type { OhosPreferencesProxy } from '../preferences/OhosPreferencesStore.e
 export default class EntryAbility extends UIAbility {
   /** Timestamp when the app was last moved to background (for lock timeout). */
   private backgroundTimestamp: number = 0;
+
+  /** Download service instance managing background downloads. */
+  private downloadService: DownloadService | null = null;
 
   onCreate(want, launchParam): void {
     // Build platform context paths from UIAbilityContext
@@ -86,6 +90,19 @@ export default class EntryAbility extends UIAbility {
     if (!status.storage) {
       // Storage init failed — log or handle gracefully
     }
+
+    // Initialize DownloadService with background task support.
+    // The BackgroundTaskManagerApi is wired to @ohos.resourceschedule.backgroundTaskManager
+    // at runtime; see createBackgroundTaskManagerApi() below.
+    this.downloadService = new DownloadService();
+  }
+
+  /**
+   * Get the DownloadService instance (for use by pages/view models).
+   * Returns null if not yet initialized.
+   */
+  getDownloadService(): DownloadService | null {
+    return this.downloadService;
   }
 
   onWindowStageCreate(windowStage: window.WindowStage): void {
@@ -112,6 +129,11 @@ export default class EntryAbility extends UIAbility {
   }
 
   onDestroy(): void {
+    // Stop download service and release background running
+    if (this.downloadService !== null) {
+      this.downloadService.stop();
+      this.downloadService = null;
+    }
     // Cleanup: reset initializer state
     // In production: close database connections, cancel pending tasks
   }
