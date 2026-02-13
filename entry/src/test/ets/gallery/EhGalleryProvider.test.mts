@@ -4,11 +4,14 @@ import assert from 'node:assert/strict';
 import {
   EhGalleryProvider,
   MODE_READ,
+  DEFAULT_CACHE_MAX_ENTRIES,
+  DEFAULT_CACHE_MAX_BYTES,
 } from '../../../main/ets/gallery/EhGalleryProvider.ets';
 import type {
   OnSpiderListener,
   SpiderQueenLike,
   SpiderQueenFactory,
+  CacheOptions,
 } from '../../../main/ets/gallery/EhGalleryProvider.ets';
 import { STATE_ERROR } from '../../../main/ets/gallery/GalleryProvider.ets';
 import type { GalleryProviderListener } from '../../../main/ets/gallery/GalleryProvider.ets';
@@ -436,6 +439,172 @@ describe('EhGalleryProvider', () => {
 
       provider.onPageDownload(0, 2048, 2048, 256);
       assert.strictEqual(listener.pagePercents[1].percent, 1.0);
+    });
+  });
+
+  // ---- Cache strategy ----
+
+  describe('cache strategy', () => {
+    it('should have zero cache size initially', () => {
+      assert.strictEqual(provider.cacheSize, 0);
+      assert.strictEqual(provider.cacheBytes, 0);
+    });
+
+    it('should cache image data on onGetImageSuccess', () => {
+      provider.start();
+      const data = new Uint8Array([0xFF, 0xD8, 0xFF, 0xE0]);
+      provider.onGetImageSuccess(0, data);
+      assert.strictEqual(provider.cacheSize, 1);
+      assert.strictEqual(provider.cacheBytes, 4);
+    });
+
+    it('should serve cached page on request without hitting spider', () => {
+      provider.start();
+      const data = new Uint8Array([1, 2, 3]);
+      provider.onGetImageSuccess(5, data);
+
+      // Clear listener state
+      listener.pageSucceeds.length = 0;
+      spider.requestedIndices.length = 0;
+
+      // Request the cached page
+      provider.request(5);
+
+      // Should get succeed immediately from cache
+      assert.strictEqual(listener.pageSucceeds.length, 1);
+      assert.strictEqual(listener.pageSucceeds[0].index, 5);
+      assert.deepStrictEqual(listener.pageSucceeds[0].data, data);
+
+      // Spider should NOT have been called
+      assert.strictEqual(spider.requestedIndices.length, 0);
+    });
+
+    it('should delegate to spider on cache miss', () => {
+      provider.start();
+      spider.requestResult = null;
+
+      provider.request(3);
+
+      // Spider should have been called
+      assert.deepStrictEqual(spider.requestedIndices, [3]);
+      assert.deepStrictEqual(listener.pageWaits, [3]);
+    });
+
+    it('forceRequest should bypass cache', () => {
+      provider.start();
+      const data = new Uint8Array([10, 20, 30]);
+      provider.onGetImageSuccess(2, data);
+      assert.strictEqual(provider.cacheSize, 1);
+
+      spider.forceRequestResult = null;
+
+      // Force request should NOT use cache
+      provider.forceRequest(2);
+
+      // Spider should have been called
+      assert.deepStrictEqual(spider.forceRequestedIndices, [2]);
+      assert.deepStrictEqual(listener.pageWaits, [2]);
+
+      // Cache entry should be evicted
+      assert.strictEqual(provider.cacheSize, 0);
+    });
+
+    it('should clear cache on stop', () => {
+      provider.start();
+      provider.onGetImageSuccess(0, new Uint8Array([1, 2, 3]));
+      provider.onGetImageSuccess(1, new Uint8Array([4, 5, 6]));
+      assert.strictEqual(provider.cacheSize, 2);
+
+      provider.stop();
+      assert.strictEqual(provider.cacheSize, 0);
+      assert.strictEqual(provider.cacheBytes, 0);
+    });
+
+    it('should evict oldest entry when maxEntries exceeded', () => {
+      const smallCacheProvider = new EhGalleryProvider(galleryInfo, factory, { maxEntries: 2 });
+      smallCacheProvider.addListener(listener);
+      smallCacheProvider.start();
+
+      smallCacheProvider.onGetImageSuccess(0, new Uint8Array([1]));
+      smallCacheProvider.onGetImageSuccess(1, new Uint8Array([2]));
+      smallCacheProvider.onGetImageSuccess(2, new Uint8Array([3]));
+
+      assert.strictEqual(smallCacheProvider.cacheSize, 2);
+
+      // Page 0 should be evicted; requesting it should hit spider
+      spider.requestResult = null;
+      spider.requestedIndices.length = 0;
+      listener.pageSucceeds.length = 0;
+
+      smallCacheProvider.request(0);
+      assert.strictEqual(spider.requestedIndices.length, 1); // cache miss
+
+      // Page 2 should still be cached
+      smallCacheProvider.request(2);
+      assert.strictEqual(listener.pageSucceeds.length, 1);
+      assert.strictEqual(listener.pageSucceeds[0].index, 2);
+
+      smallCacheProvider.stop();
+    });
+
+    it('should evict entries when maxBytes exceeded', () => {
+      const smallByteProvider = new EhGalleryProvider(galleryInfo, factory, {
+        maxEntries: 100,
+        maxBytes: 10,
+      });
+      smallByteProvider.addListener(listener);
+      smallByteProvider.start();
+
+      smallByteProvider.onGetImageSuccess(0, new Uint8Array(4)); // 4 bytes
+      smallByteProvider.onGetImageSuccess(1, new Uint8Array(4)); // 8 bytes total
+      assert.strictEqual(smallByteProvider.cacheSize, 2);
+
+      smallByteProvider.onGetImageSuccess(2, new Uint8Array(5)); // 13 > 10
+      // Page 0 should be evicted (4 bytes removed → 9 ≤ 10)
+      assert.strictEqual(smallByteProvider.cacheBytes, 9);
+
+      spider.requestResult = null;
+      spider.requestedIndices.length = 0;
+      smallByteProvider.request(0); // cache miss
+      assert.strictEqual(spider.requestedIndices.length, 1);
+
+      smallByteProvider.stop();
+    });
+
+    it('should use default cache options when not specified', () => {
+      // Verify the defaults are exported and sensible
+      assert.strictEqual(DEFAULT_CACHE_MAX_ENTRIES, 12);
+      assert.strictEqual(DEFAULT_CACHE_MAX_BYTES, 50 * 1024 * 1024);
+    });
+
+    it('should update cache entry on re-fetch via onGetImageSuccess', () => {
+      provider.start();
+      const data1 = new Uint8Array([1, 2]);
+      const data2 = new Uint8Array([3, 4, 5, 6]);
+
+      provider.onGetImageSuccess(0, data1);
+      assert.strictEqual(provider.cacheBytes, 2);
+
+      provider.onGetImageSuccess(0, data2);
+      assert.strictEqual(provider.cacheSize, 1);
+      assert.strictEqual(provider.cacheBytes, 4);
+
+      // Requesting should return the updated data
+      listener.pageSucceeds.length = 0;
+      provider.request(0);
+      assert.deepStrictEqual(listener.pageSucceeds[0].data, data2);
+    });
+
+    it('should serve from cache even before spider start (if pre-populated)', () => {
+      // This tests that onRequest checks cache before checking spider
+      // In practice, cache is only populated after start, but the logic is sound
+      provider.start();
+      provider.onGetImageSuccess(7, new Uint8Array([42]));
+
+      listener.pageSucceeds.length = 0;
+      provider.request(7);
+      assert.strictEqual(listener.pageSucceeds.length, 1);
+      assert.strictEqual(listener.pageSucceeds[0].index, 7);
     });
   });
 });

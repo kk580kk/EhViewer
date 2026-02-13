@@ -11,6 +11,7 @@
 
 import { GalleryProvider, STATE_ERROR } from './GalleryProvider.ets';
 import { GalleryInfo } from '../model/GalleryInfo.ets';
+import { LruCache } from '../util/LruCache.ets';
 
 // ---- Spider interface (dependency injection) ----
 
@@ -59,9 +60,26 @@ export interface SpiderQueenFactory {
 export const MODE_READ = 0;
 export const MODE_DOWNLOAD = 1;
 
+/** Default maximum number of pages kept in the in-memory image cache. */
+export const DEFAULT_CACHE_MAX_ENTRIES = 12;
+
+/** Default maximum total bytes for the in-memory image cache (50 MB). */
+export const DEFAULT_CACHE_MAX_BYTES = 50 * 1024 * 1024;
+
+/** Options for configuring the page image cache. */
+export interface CacheOptions {
+  /** Maximum number of cached pages (default: 12). */
+  maxEntries?: number;
+  /** Maximum total byte size of cached images (default: 50 MB). */
+  maxBytes?: number;
+}
+
 /**
  * Online gallery provider that delegates to a SpiderQueen for
  * fetching and caching gallery pages from E-Hentai/ExHentai.
+ *
+ * Includes an in-memory LRU cache so that recently viewed pages
+ * are served instantly without re-fetching from the spider.
  *
  * Mirrors the Android EhGalleryProvider.
  */
@@ -71,10 +89,18 @@ export class EhGalleryProvider extends GalleryProvider implements OnSpiderListen
   private readonly factory: SpiderQueenFactory;
   private spider: SpiderQueenLike | null = null;
 
-  constructor(galleryInfo: GalleryInfo, factory: SpiderQueenFactory) {
+  /** In-memory LRU cache of page image data (index → Uint8Array). */
+  private readonly cache: LruCache<number, Uint8Array>;
+
+  constructor(galleryInfo: GalleryInfo, factory: SpiderQueenFactory, cacheOptions?: CacheOptions) {
     super();
     this.galleryInfo = galleryInfo;
     this.factory = factory;
+    this.cache = new LruCache<number, Uint8Array>(
+      cacheOptions?.maxEntries ?? DEFAULT_CACHE_MAX_ENTRIES,
+      cacheOptions?.maxBytes ?? DEFAULT_CACHE_MAX_BYTES,
+      (data: Uint8Array) => data.byteLength,
+    );
   }
 
   override start(): void {
@@ -90,6 +116,7 @@ export class EhGalleryProvider extends GalleryProvider implements OnSpiderListen
       this.factory.release(this.spider, MODE_READ);
       this.spider = null;
     }
+    this.cache.clear();
   }
 
   override size(): number {
@@ -122,9 +149,28 @@ export class EhGalleryProvider extends GalleryProvider implements OnSpiderListen
     return this.spider !== null ? this.spider.saveToDir(index, dir, filename) : null;
   }
 
+  // ---- Cache accessors (for testing / diagnostics) ----
+
+  /** Number of pages currently in the cache. */
+  get cacheSize(): number {
+    return this.cache.size;
+  }
+
+  /** Total byte cost of cached pages. */
+  get cacheBytes(): number {
+    return this.cache.bytes;
+  }
+
   // ---- Request handlers ----
 
   protected override onRequest(index: number): void {
+    // Serve from cache if available
+    const cached = this.cache.get(index);
+    if (cached !== undefined) {
+      this.notifyPageSucceed(index, cached);
+      return;
+    }
+
     if (this.spider === null) return;
     const result = this.spider.request(index);
     if (typeof result === 'number') {
@@ -137,6 +183,9 @@ export class EhGalleryProvider extends GalleryProvider implements OnSpiderListen
   }
 
   protected override onForceRequest(index: number): void {
+    // Force request always bypasses cache; also evict stale entry
+    this.cache.delete(index);
+
     if (this.spider === null) return;
     const result = this.spider.forceRequest(index);
     if (typeof result === 'number') {
@@ -181,6 +230,7 @@ export class EhGalleryProvider extends GalleryProvider implements OnSpiderListen
   }
 
   onGetImageSuccess(index: number, data: Uint8Array): void {
+    this.cache.put(index, data);
     this.notifyPageSucceed(index, data);
   }
 
