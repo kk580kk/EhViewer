@@ -24,6 +24,7 @@ import type { FsOps } from './util/FileUtils.ets';
 const DOWNLOAD = 'download';
 const TEMP = 'temp';
 const IMAGE = 'image';
+const SHARE = 'share';
 const PARSE_ERROR = 'parse_error';
 const LOGCAT = 'logcat';
 const DATA = 'data';
@@ -121,6 +122,11 @@ export class AppConfig {
   /** Cached image directory. */
   static getImageDir(): string | null {
     return AppConfig.getDirInCacheDir(IMAGE);
+  }
+
+  /** Share staging directory (temporary files prepared for sharing). */
+  static getShareDir(): string | null {
+    return AppConfig.getDirInCacheDir(SHARE);
   }
 
   // ---- Temp file creation ----

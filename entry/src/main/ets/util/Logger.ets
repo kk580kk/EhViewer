@@ -90,6 +90,61 @@ class ConsoleSink implements LogSink {
   }
 }
 
+// ---- HiLog integration ----
+
+/**
+ * Abstraction over HarmonyOS hilog API.
+ * Production: import hilog from '@ohos.hilog' and pass it here.
+ * Tests: supply a mock implementation.
+ */
+export interface HiLogApi {
+  debug(domain: number, tag: string, format: string, ...args: Object[]): void;
+  info(domain: number, tag: string, format: string, ...args: Object[]): void;
+  warn(domain: number, tag: string, format: string, ...args: Object[]): void;
+  error(domain: number, tag: string, format: string, ...args: Object[]): void;
+}
+
+/**
+ * Sink that forwards log entries to HarmonyOS hilog system log.
+ *
+ * Usage (production):
+ *   import hilog from '@ohos.hilog';
+ *   Logger.addSink(new HiLogSink(hilog, 0x0001));
+ */
+export class HiLogSink implements LogSink {
+  private readonly hilog: HiLogApi;
+  private readonly domain: number;
+
+  constructor(hilog: HiLogApi, domain: number = 0x0000) {
+    this.hilog = hilog;
+    this.domain = domain;
+  }
+
+  write(entry: LogEntry): void {
+    const msg = entry.error
+      ? `${entry.message}: ${entry.error.message}`
+      : entry.message;
+
+    switch (entry.level) {
+      case LogLevel.VERBOSE:
+      case LogLevel.DEBUG:
+        this.hilog.debug(this.domain, entry.tag, '%{public}s', msg);
+        break;
+      case LogLevel.INFO:
+        this.hilog.info(this.domain, entry.tag, '%{public}s', msg);
+        break;
+      case LogLevel.WARN:
+        this.hilog.warn(this.domain, entry.tag, '%{public}s', msg);
+        break;
+      case LogLevel.ERROR:
+        this.hilog.error(this.domain, entry.tag, '%{public}s', msg);
+        break;
+      default:
+        break;
+    }
+  }
+}
+
 /** Sink that collects entries in memory (for testing / crash reporting). */
 export class BufferSink implements LogSink {
   private entries: LogEntry[] = [];

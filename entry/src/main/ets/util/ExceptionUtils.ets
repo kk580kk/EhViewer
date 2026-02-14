@@ -10,9 +10,11 @@
  */
 
 import { EhException } from '../client/exception/EhException.ets';
+import { StatusCodeException } from '../network/StatusCodeException.ets';
 
 // Re-export so existing consumers keep working via this module.
 export { EhException } from '../client/exception/EhException.ets';
+export { StatusCodeException } from '../network/StatusCodeException.ets';
 
 /**
  * Localised error message strings, injected by the caller.
@@ -29,26 +31,15 @@ export interface ErrorStrings {
 }
 
 /**
- * HTTP status code error.
- */
-export class StatusCodeException extends Error {
-  readonly responseCode: number;
-  readonly identified: boolean;
-
-  constructor(responseCode: number, message?: string) {
-    super(message ?? `Error response code: ${responseCode}`);
-    this.name = 'StatusCodeException';
-    this.responseCode = responseCode;
-    this.identified = message !== undefined && message.length > 0;
-  }
-}
-
-/**
- * Utility methods for translating errors into user-readable messages.
+ * Utility methods for exception chain traversal, message extraction,
+ * and translating errors into user-readable messages.
  */
 export class ExceptionUtils {
 
   private static errorStrings: ErrorStrings | null = null;
+
+  /** Maximum depth when walking cause chains to avoid infinite loops. */
+  private static readonly MAX_CHAIN_DEPTH = 64;
 
   /**
    * Inject localised error strings. Must be called once during app startup.
@@ -56,6 +47,64 @@ export class ExceptionUtils {
   static initialize(strings: ErrorStrings): void {
     ExceptionUtils.errorStrings = strings;
   }
+
+  // ---- Exception chain traversal ----
+
+  /**
+   * Walk the cause chain starting from `e` and return all errors in order
+   * (outermost first). Stops at the first `null`/`undefined` cause or when
+   * a cycle is detected.
+   */
+  static getCauseChain(e: Error): Error[] {
+    const chain: Error[] = [];
+    const visited = new Set<Error>();
+    let current: Error | undefined = e;
+    while (current && !visited.has(current) && chain.length < ExceptionUtils.MAX_CHAIN_DEPTH) {
+      visited.add(current);
+      chain.push(current);
+      current = current.cause instanceof Error ? current.cause as Error : undefined;
+    }
+    return chain;
+  }
+
+  /**
+   * Return the root cause (deepest cause) of the error chain.
+   * If the error has no cause, returns itself.
+   */
+  static getRootCause(e: Error): Error {
+    const chain = ExceptionUtils.getCauseChain(e);
+    return chain[chain.length - 1];
+  }
+
+  // ---- Message extraction ----
+
+  /**
+   * Collect all non-empty messages from the cause chain (outermost first).
+   */
+  static getMessages(e: Error): string[] {
+    return ExceptionUtils.getCauseChain(e)
+      .map(err => err.message)
+      .filter(msg => msg !== undefined && msg.length > 0);
+  }
+
+  /**
+   * Return the first non-empty message found in the cause chain,
+   * or the fallback string if none exists.
+   */
+  static getFirstMessage(e: Error, fallback: string = 'Unknown error'): string {
+    const messages = ExceptionUtils.getMessages(e);
+    return messages.length > 0 ? messages[0] : fallback;
+  }
+
+  /**
+   * Return the root cause's message, or the fallback string.
+   */
+  static getRootCauseMessage(e: Error, fallback: string = 'Unknown error'): string {
+    const root = ExceptionUtils.getRootCause(e);
+    return root.message && root.message.length > 0 ? root.message : fallback;
+  }
+
+  // ---- Readable string conversion ----
 
   /**
    * Convert an Error to a user-readable string.
@@ -77,7 +126,7 @@ export class ExceptionUtils {
     }
     if (e instanceof StatusCodeException) {
       let msg = s.badStatusCode.replace('{0}', String(e.responseCode));
-      if (e.identified) {
+      if (e.isIdentifiedResponseCode) {
         msg += `, ${e.message}`;
       }
       return msg;
@@ -93,6 +142,8 @@ export class ExceptionUtils {
     }
     return s.unknown;
   }
+
+  // ---- Fatal error handling ----
 
   /**
    * Re-throw fatal errors that should never be caught

@@ -1,27 +1,11 @@
-// Top-level build file where you can add configuration options common to all sub-projects/modules.
-
-buildscript {
-    repositories {
-        google()
-        jcenter()
-        maven { url "https://maven.fabric.io/public" }
-        maven { url "https://jitpack.io" }
-    }
-    dependencies {
-        classpath 'com.android.tools.build:gradle:3.4.2'
-        classpath 'com.google.gms:google-services:4.3.0'
-        classpath 'io.fabric.tools:gradle:1.27.1'
-
-        // NOTE: Do not place your application dependencies here; they belong
-        // in the individual module build.gradle files
-    }
-}
+// 根构建已由 HarmonyOS hvigor 接管，此文件仅保留以免 Gradle 报错。
+// 主构建请使用: npm run build 或 hvigorw assembleHap
+// 原 Android 构建配置已弃用，见 build.gradle.bak（若需恢复可重命名）
 
 allprojects {
     repositories {
         google()
-        jcenter()
-        maven { url "https://jitpack.io" }
+        mavenCentral()
     }
 }
 

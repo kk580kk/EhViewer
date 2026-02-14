@@ -1,7 +1,7 @@
 import { describe, it, beforeEach } from 'node:test';
 import assert from 'node:assert/strict';
-import { Logger, LogLevel, BufferSink } from '../../../main/ets/util/Logger.ets';
-import type { LogSink, LogEntry } from '../../../main/ets/util/Logger.ets';
+import { Logger, LogLevel, BufferSink, HiLogSink } from '../../../main/ets/util/Logger.ets';
+import type { LogSink, LogEntry, HiLogApi } from '../../../main/ets/util/Logger.ets';
 
 describe('Logger', () => {
   beforeEach(() => {
@@ -160,6 +160,108 @@ describe('Logger', () => {
     it('should get and set level', () => {
       Logger.setLevel(LogLevel.ERROR);
       assert.strictEqual(Logger.getLevel(), LogLevel.ERROR);
+    });
+  });
+
+  describe('HiLogSink', () => {
+    /** Captures calls made to the mock hilog API. */
+    interface HiLogCall {
+      method: string;
+      domain: number;
+      tag: string;
+      message: string;
+    }
+
+    function createMockHiLog(): { api: HiLogApi; calls: HiLogCall[] } {
+      const calls: HiLogCall[] = [];
+      const capture = (method: string) =>
+        (domain: number, tag: string, _format: string, ...args: Object[]): void => {
+          calls.push({ method, domain, tag, message: String(args[0] ?? '') });
+        };
+      return {
+        calls,
+        api: {
+          debug: capture('debug'),
+          info: capture('info'),
+          warn: capture('warn'),
+          error: capture('error'),
+        },
+      };
+    }
+
+    it('should forward DEBUG level to hilog.debug', () => {
+      const { api, calls } = createMockHiLog();
+      const sink = new HiLogSink(api, 0x0001);
+      Logger.setSinks([sink]);
+
+      Logger.tag('Test').d('debug message');
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'debug');
+      assert.strictEqual(calls[0].domain, 0x0001);
+      assert.strictEqual(calls[0].tag, 'Test');
+      assert.ok(calls[0].message.includes('debug message'));
+    });
+
+    it('should forward INFO level to hilog.info', () => {
+      const { api, calls } = createMockHiLog();
+      const sink = new HiLogSink(api, 0x0002);
+      Logger.setSinks([sink]);
+
+      Logger.tag('Net').i('connected');
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'info');
+      assert.strictEqual(calls[0].domain, 0x0002);
+      assert.strictEqual(calls[0].tag, 'Net');
+    });
+
+    it('should forward WARN level to hilog.warn', () => {
+      const { api, calls } = createMockHiLog();
+      const sink = new HiLogSink(api);
+      Logger.setSinks([sink]);
+
+      Logger.tag('W').w('low memory');
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'warn');
+    });
+
+    it('should forward ERROR level to hilog.error', () => {
+      const { api, calls } = createMockHiLog();
+      const sink = new HiLogSink(api);
+      Logger.setSinks([sink]);
+
+      Logger.tag('E').e('crash', new Error('oops'));
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'error');
+      assert.ok(calls[0].message.includes('crash'));
+      assert.ok(calls[0].message.includes('oops'));
+    });
+
+    it('should forward VERBOSE level to hilog.debug', () => {
+      const { api, calls } = createMockHiLog();
+      const sink = new HiLogSink(api);
+      Logger.setSinks([sink]);
+
+      Logger.tag('V').v('trace');
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'debug');
+    });
+
+    it('should respect global log level filter', () => {
+      const { api, calls } = createMockHiLog();
+      const sink = new HiLogSink(api);
+      Logger.setSinks([sink]);
+      Logger.setLevel(LogLevel.ERROR);
+
+      Logger.tag('T').d('should be filtered');
+      Logger.tag('T').e('should pass');
+
+      assert.strictEqual(calls.length, 1);
+      assert.strictEqual(calls[0].method, 'error');
     });
   });
 });

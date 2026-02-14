@@ -53,6 +53,21 @@ if (fs.existsSync(moduleJson)) {
   }
 }
 
+// 检查 HarmonyOS SDK 路径配置 (local.properties)
+const localProps = path.join(ROOT, 'local.properties');
+if (fs.existsSync(localProps)) {
+  const content = fs.readFileSync(localProps, 'utf8');
+  const match = content.match(/hwsdk\.dir\s*=\s*(.+)/);
+  if (!match || !match[1].trim()) {
+    console.error('local.properties 中请设置 hwsdk.dir 为你的 OpenHarmony/HarmonyOS SDK 目录，例如：');
+    console.error('  hwsdk.dir=/Volumes/Brave 2T/OpenHarmony/Sdk');
+    failed++;
+  }
+} else {
+  console.error('缺少 local.properties，请创建并设置 hwsdk.dir（SDK 路径）');
+  failed++;
+}
+
 if (failed > 0) {
   process.exit(1);
 }

@@ -136,6 +136,23 @@
         android:summary="@string/settings_eh_filter_summary"
         app:activity="com.hippo.ehviewer.ui.FilterActivity"/>
 
+    <com.hippo.ehviewer.preference.DefaultCategoryPreference
+        android:key="default_categories"
+        android:title="@string/settings_eh_default_categories"
+        android:summary="@string/settings_eh_default_categories_summary"/>
+
+    <com.hippo.ehviewer.preference.ExcludedTagNamespacesPreference
+        android:key="excluded_tag_namespaces"
+        android:title="@string/settings_eh_excluded_tag_namespaces"
+        android:summary="@string/settings_eh_excluded_tag_namespaces_summary"/>
+
+    <com.hippo.preference.ActivityPreference
+        xmlns:app="http://schemas.android.com/apk/res-auto"
+        android:key="excluded_languages"
+        android:title="@string/settings_eh_excluded_languages"
+        android:summary="@string/settings_eh_excluded_languages_summary"
+        app:activity="com.hippo.ehviewer.ui.ExcludedLanguagesActivity"/>
+
     <com.hippo.preference.SwitchPreference
         android:key="cellular_network_warning"
         android:title="@string/settings_eh_cellular_network_warning"

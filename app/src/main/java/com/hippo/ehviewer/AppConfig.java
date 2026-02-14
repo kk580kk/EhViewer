@@ -17,6 +17,7 @@
 package com.hippo.ehviewer;
 
 import android.content.Context;
+import android.os.Build;
 import android.os.Environment;
 import androidx.annotation.Nullable;
 import com.hippo.ehviewer.client.exception.ParseException;
@@ -48,6 +49,15 @@ public class AppConfig {
 
     @Nullable
     public static File getExternalAppDir() {
+        // On Android 10+ (Q), use scoped storage via getExternalFilesDir()
+        if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.Q) {
+            File dir = sContext.getExternalFilesDir(null);
+            if (dir != null && FileUtils.ensureDirectory(dir)) {
+                return dir;
+            }
+            return null;
+        }
+        // Legacy path for older Android versions
         if (Environment.MEDIA_MOUNTED.equals(Environment.getExternalStorageState())) {
             File dir = new File(Environment.getExternalStorageDirectory(), APP_DIRNAME);
             return FileUtils.ensureDirectory(dir) ? dir : null;

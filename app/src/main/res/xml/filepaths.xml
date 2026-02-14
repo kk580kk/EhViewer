@@ -15,8 +15,23 @@
   ~ limitations under the License.
   -->
 
-<path xmlns:android="http://schemas.android.com/apk/res/android">
+<paths xmlns:android="http://schemas.android.com/apk/res/android">
 
+    <!-- Internal cache (Context.getCacheDir()) -->
+    <cache-path name="cache" path="."/>
+
+    <!-- Internal files (Context.getFilesDir()) -->
+    <files-path name="files" path="."/>
+
+    <!-- External files (Context.getExternalFilesDir()) -->
+    <external-files-path name="external_files" path="."/>
+
+    <!-- External cache (Context.getExternalCacheDir()) -->
+    <external-cache-path name="external_cache" path="."/>
+
+    <!-- Legacy external storage path for backward compatibility -->
+    <external-path name="download" path="EhViewer/download"/>
     <external-path name="temp" path="EhViewer/temp"/>
+    <external-path name="image" path="EhViewer/image"/>
 
-</path>
+</paths>

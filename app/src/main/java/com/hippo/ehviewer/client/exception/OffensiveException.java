@@ -17,11 +17,15 @@
 package com.hippo.ehviewer.client.exception;
 
 /**
- * It is an exception for get offensive tip for g.e-hentai.org
+ * 敏感内容异常。当页面返回 offensive 提示（如 g.e-hentai.org 的敏感内容警告）时抛出。
  */
 public class OffensiveException extends EhException {
 
     public OffensiveException() {
         super("OFFENSIVE");
+    }
+
+    public OffensiveException(String message) {
+        super(message);
     }
 }

@@ -85,6 +85,7 @@ public class AdvancedFragment extends PreferenceFragment
         } else if (KEY_CLEAR_MEMORY_CACHE.equals(key)) {
             ((EhApplication) getActivity().getApplication()).clearMemoryCache();
             Runtime.getRuntime().gc();
+            return true;
         } else if (KEY_IMPORT_DATA.equals(key)) {
             importData(getActivity());
             getActivity().setResult(Activity.RESULT_OK);

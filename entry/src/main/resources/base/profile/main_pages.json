@@ -2,6 +2,9 @@
   "src": [
     "pages/Index",
     "pages/GalleryDetailPage",
-    "pages/GalleryReaderPage"
+    "pages/GalleryReaderPage",
+    "pages/SignInPage",
+    "pages/CookieSignInPage",
+    "pages/WebViewSignInPage"
   ]
 }

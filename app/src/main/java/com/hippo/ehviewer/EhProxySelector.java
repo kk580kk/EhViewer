@@ -91,7 +91,7 @@ public class EhProxySelector extends ProxySelector {
   @Override
   public void connectFailed(URI uri, SocketAddress sa, IOException ioe) {
     if (delegation != null) {
-      delegation.select(uri);
+      delegation.connectFailed(uri, sa, ioe);
     }
   }
 

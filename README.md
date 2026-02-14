@@ -6,9 +6,9 @@
 
 ![Icon](art/launcher_icon-web.png)
 
-这是一个 E-Hentai Android 平台的浏览器。
+E-Hentai 应用，**当前为 HarmonyOS / OpenHarmony 版本**。
 
-An E-Hentai Application for Android.
+An E-Hentai Application for **HarmonyOS** (OpenHarmony).
 
 
 # Screenshot
@@ -16,23 +16,58 @@ An E-Hentai Application for Android.
 ![screenshot-01](art/screenshot-01.png)
 
 
-# Build
+# Build（产出安装包 HAP）
 
-Windows
+本项目为 **HarmonyOS 工程**，主构建产物为可安装的 **HAP 包**。
 
-    > git clone https://github.com/seven332/EhViewer
-    > cd EhViewer
-    > gradlew app:assembleDebug
+**1. 配置 SDK 路径**
 
-Linux
+在项目根目录创建或编辑 `local.properties`（若不存在），设置 OpenHarmony / HarmonyOS SDK 目录：
 
-    $ git clone https://github.com/seven332/EhViewer
-    $ cd EhViewer
-    $ ./gradlew app:assembleDebug
+```properties
+hwsdk.dir=/path/to/your/OpenHarmony/Sdk
+```
 
-生成的 apk 文件在 app\build\outputs\apk 目录下
+请将路径改为本机实际 SDK 安装位置（如 DevEco Studio 的 Sdk 目录）。
 
-The apk is in app\build\outputs\apk
+**2. 构建 HAP 安装包**
+
+```bash
+# 安装依赖（首次或依赖变更时）
+npm install
+ohpm install
+
+# 构建 release HAP（默认）
+npm run build
+
+# 构建 debug HAP
+npm run build:debug
+
+# 清理
+npm run clean
+```
+
+若命令行构建失败，请使用 **DevEco Studio** 打开项目根目录，在 `File > Settings > SDK` 中配置 SDK 路径后，在 IDE 中直接构建/运行。
+
+**3. HAP 输出与安装**
+
+- **输出路径**：`entry/build/default/outputs/default/` 下生成 `entry-default-unsigned.hap`（或 signed 版本）。
+- **安装方式**：
+  - 在 DevEco Studio 中连接设备/模拟器，点击 Run 安装并运行；
+  - 或使用命令行：`hdc install entry/build/default/outputs/default/entry-default-unsigned.hap`（需设备已连接并开启调试）。
+
+**4. Release 签名（可选）**
+
+如需可分发的 release 安装包，请在 `build-profile.json5` 的 `app.signingConfigs` 中配置签名，或在 DevEco Studio 中配置 Signing。未配置时仅生成 unsigned HAP，可用于 debug 安装。
+
+
+# Build（Android 源码，仅作参考）
+
+`app/`、`daogenerator/` 下的 Android 源码保留作参考，**不参与主构建**。若需本地构建 Android APK，可恢复 `settings.gradle` 中的 `include ':app', ':daogenerator'` 后使用 Gradle：
+
+    ./gradlew app:assembleDebug
+
+生成的 apk 在 `app/build/outputs/apk` 目录下。
 
 
 # Download

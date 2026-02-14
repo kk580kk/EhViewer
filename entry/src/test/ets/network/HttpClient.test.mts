@@ -6,6 +6,7 @@ import {
   buildMultipartBody,
   generateBoundary,
   buildEhHeaders,
+  resolveUrl,
 } from '../../../main/ets/network/HttpClient.ets';
 import type {
   HttpEngine,
@@ -28,6 +29,29 @@ class MockEngine implements HttpEngine {
       throw this.rejectError;
     }
     return this.response;
+  }
+}
+
+/**
+ * A mock engine that returns different responses based on the request URL.
+ * Used for testing redirect chains and E-Hentai scenarios.
+ */
+class RoutingMockEngine implements HttpEngine {
+  requests: HttpRequest[] = [];
+  private routes: Map<string, HttpResponse> = new Map();
+  private fallback: HttpResponse = { statusCode: 200, headers: {}, body: '' };
+
+  on(url: string, response: HttpResponse): void {
+    this.routes.set(url, response);
+  }
+
+  setFallback(response: HttpResponse): void {
+    this.fallback = response;
+  }
+
+  async execute(request: HttpRequest): Promise<HttpResponse> {
+    this.requests.push(request);
+    return this.routes.get(request.url) ?? this.fallback;
   }
 }
 
@@ -253,7 +277,7 @@ describe('HttpClient', () => {
       assert.strictEqual(res.statusCode, 200);
     });
 
-    it('should not throw for 3xx responses', async () => {
+    it('should not throw for 3xx responses without Location header', async () => {
       engine.response = { statusCode: 301, headers: {}, body: '' };
       const res = await client.get('https://example.com');
       assert.strictEqual(res.statusCode, 301);

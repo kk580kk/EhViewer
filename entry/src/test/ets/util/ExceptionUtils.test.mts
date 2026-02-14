@@ -26,16 +26,16 @@ describe('ExceptionUtils', () => {
       assert.strictEqual(ExceptionUtils.getReadableString(e), 'custom message');
     });
 
-    it('should handle StatusCodeException', () => {
-      const e = new StatusCodeException(404, 'Not Found');
+    it('should handle StatusCodeException with identified code', () => {
+      const e = new StatusCodeException(404);
       const msg = ExceptionUtils.getReadableString(e);
-      assert.strictEqual(msg, 'Bad status code: 404, Not Found');
+      assert.strictEqual(msg, 'Bad status code: 404, 404 Not Found');
     });
 
-    it('should handle StatusCodeException without identified message', () => {
-      const e = new StatusCodeException(500);
+    it('should handle StatusCodeException with unidentified code', () => {
+      const e = new StatusCodeException(418);
       const msg = ExceptionUtils.getReadableString(e);
-      assert.strictEqual(msg, 'Bad status code: 500');
+      assert.strictEqual(msg, 'Bad status code: 418');
     });
 
     it('should handle timeout errors', () => {
@@ -88,16 +88,16 @@ describe('ExceptionUtils', () => {
 
   describe('StatusCodeException', () => {
     it('should store response code', () => {
-      const e = new StatusCodeException(403, 'Forbidden');
+      const e = new StatusCodeException(403);
       assert.strictEqual(e.responseCode, 403);
-      assert.strictEqual(e.identified, true);
-      assert.strictEqual(e.message, 'Forbidden');
+      assert.strictEqual(e.isIdentifiedResponseCode, true);
+      assert.strictEqual(e.message, '403 Forbidden');
     });
 
     it('should handle unidentified codes', () => {
       const e = new StatusCodeException(418);
       assert.strictEqual(e.responseCode, 418);
-      assert.strictEqual(e.identified, false);
+      assert.strictEqual(e.isIdentifiedResponseCode, false);
     });
   });
 });

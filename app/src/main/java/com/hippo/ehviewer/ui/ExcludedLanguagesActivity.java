@@ -29,7 +29,7 @@ import com.hippo.android.resource.AttrResources;
 import com.hippo.easyrecyclerview.EasyRecyclerView;
 import com.hippo.ehviewer.R;
 import com.hippo.ehviewer.Settings;
-import com.hippo.ehviewer.client.EhConfig;
+import com.hippo.ehviewer.client.ExcludedLanguagesHelper;
 import com.hippo.ripple.Ripple;
 import com.hippo.widget.SensitiveCheckBox;
 import com.hippo.yorozuya.ViewUtils;
@@ -39,7 +39,7 @@ public class ExcludedLanguagesActivity extends ToolbarActivity
 
     private static final String KEY_SELECTIONS = "selections";
 
-    private static final int ROW_COUNT = 17;
+    private static final int ROW_COUNT = ExcludedLanguagesHelper.ROW_COUNT;
     private static final int[] LANGUAGE_STR_IDS = {
             R.string.language_japanese,
             R.string.language_english,
@@ -59,59 +59,6 @@ public class ExcludedLanguagesActivity extends ToolbarActivity
             R.string.language_na,
             R.string.language_other
     };
-
-    private static final String[] LANGUAGES = {
-            EhConfig.JAPANESE_ORIGINAL,
-            EhConfig.JAPANESE_TRANSLATED,
-            EhConfig.JAPANESE_REWRITE,
-            EhConfig.ENGLISH_ORIGINAL,
-            EhConfig.ENGLISH_TRANSLATED,
-            EhConfig.ENGLISH_REWRITE,
-            EhConfig.CHINESE_ORIGINAL,
-            EhConfig.CHINESE_TRANSLATED,
-            EhConfig.CHINESE_REWRITE,
-            EhConfig.DUTCH_ORIGINAL,
-            EhConfig.DUTCH_TRANSLATED,
-            EhConfig.DUTCH_REWRITE,
-            EhConfig.FRENCH_ORIGINAL,
-            EhConfig.FRENCH_TRANSLATED,
-            EhConfig.FRENCH_REWRITE,
-            EhConfig.GERMAN_ORIGINAL,
-            EhConfig.GERMAN_TRANSLATED,
-            EhConfig.GERMAN_REWRITE,
-            EhConfig.HUNGARIAN_ORIGINAL,
-            EhConfig.HUNGARIAN_TRANSLATED,
-            EhConfig.HUNGARIAN_REWRITE,
-            EhConfig.ITALIAN_ORIGINAL,
-            EhConfig.ITALIAN_TRANSLATED,
-            EhConfig.ITALIAN_REWRITE,
-            EhConfig.KOREAN_ORIGINAL,
-            EhConfig.KOREAN_TRANSLATED,
-            EhConfig.KOREAN_REWRITE,
-            EhConfig.POLISH_ORIGINAL,
-            EhConfig.POLISH_TRANSLATED,
-            EhConfig.POLISH_REWRITE,
-            EhConfig.PORTUGUESE_ORIGINAL,
-            EhConfig.PORTUGUESE_TRANSLATED,
-            EhConfig.PORTUGUESE_REWRITE,
-            EhConfig.RUSSIAN_ORIGINAL,
-            EhConfig.RUSSIAN_TRANSLATED,
-            EhConfig.RUSSIAN_REWRITE,
-            EhConfig.SPANISH_ORIGINAL,
-            EhConfig.SPANISH_TRANSLATED,
-            EhConfig.SPANISH_REWRITE,
-            EhConfig.THAI_ORIGINAL,
-            EhConfig.THAI_TRANSLATED,
-            EhConfig.THAI_REWRITE,
-            EhConfig.VIETNAMESE_ORIGINAL,
-            EhConfig.VIETNAMESE_TRANSLATED,
-            EhConfig.VIETNAMESE_REWRITE,
-            EhConfig.NA_ORIGINAL,
-            EhConfig.NA_TRANSLATED,
-            EhConfig.NA_REWRITE,
-            EhConfig.OTHER_ORIGINAL,
-            EhConfig.OTHER_TRANSLATED,
-            EhConfig.OTHER_REWRITE};
 
     private final boolean[][] mSelections = new boolean[ROW_COUNT][3];
 
@@ -172,49 +119,11 @@ public class ExcludedLanguagesActivity extends ToolbarActivity
         Ripple.addRipple(mInvertSelection, isDarkTheme);
     }
 
-    private boolean isDecimal(String str) {
-        int length = str.length();
-
-        // "" is not decimal
-        if (length <= 0) {
-            return false;
-        }
-
-        for (int i = 0; i < length; i++) {
-            char ch = str.charAt(i);
-            if (ch < '0' || ch > '9') {
-                return false;
-            }
-        }
-        return true;
-    }
-
     private void onInit() {
         String excludedLanguages = Settings.getExcludedLanguages();
-        if (null == excludedLanguages) {
-            return;
-        }
-
-        String[] languages = excludedLanguages.split("x");
-
-        int iLength = languages.length;
-        int jLength = LANGUAGES.length;
-        for (int i = 0, j = 0; i < iLength; i++) {
-            String language = languages[i];
-            if (!isDecimal(language)) {
-                continue;
-            }
-
-            for (; j < jLength; j++) {
-                String pattern = LANGUAGES[j];
-                if (pattern.equals(language)) {
-                    // Get it
-                    int row = j / 3;
-                    int column = j % 3;
-                    mSelections[row][column] = true;
-                    break;
-                }
-            }
+        boolean[][] parsed = ExcludedLanguagesHelper.parseExcludedLanguages(excludedLanguages);
+        for (int i = 0; i < ROW_COUNT; i++) {
+            System.arraycopy(parsed[i], 0, mSelections[i], 0, 3);
         }
     }
 
@@ -283,24 +192,7 @@ public class ExcludedLanguagesActivity extends ToolbarActivity
         if (v == mCancel) {
             finish();
         } else if (v == mOk) {
-            StringBuilder sb = new StringBuilder();
-            int i = 0;
-            boolean first = true;
-            for (boolean[] selections : mSelections) {
-                for (boolean b : selections) {
-                    if (b) {
-                        if (!first) {
-                            sb.append("x");
-                        } else {
-                            first = false;
-                        }
-                        sb.append(LANGUAGES[i]);
-                    }
-                    i++;
-                }
-            }
-
-            String excludedLanguages = sb.toString();
+            String excludedLanguages = ExcludedLanguagesHelper.buildExcludedLanguages(mSelections);
             Settings.putExcludedLanguages(excludedLanguages);
             finish();
         } else if (v == mSelectAll) {

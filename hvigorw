@@ -1,0 +1,11 @@
+#!/bin/sh
+# HarmonyOS 构建包装脚本：优先使用 PATH 中的 hvigorw，否则通过 Node 脚本执行
+ROOT="$(cd "$(dirname "$0")" && pwd)"
+cd "$ROOT"
+if command -v hvigorw >/dev/null 2>&1; then
+  exec hvigorw "$@"
+fi
+if command -v hvigor >/dev/null 2>&1; then
+  exec hvigor "$@"
+fi
+exec node "$ROOT/scripts/run-hvigor.js" "$@"
