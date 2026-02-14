@@ -9,6 +9,11 @@
 release
 google-services.json
 
+# 日志文件
+*.log
+ralphy-llm.log
+.ralphy/
+
 # HarmonyOS
 node_modules
 oh_modules
