@@ -1,11 +1,17 @@
 // 根构建已由 HarmonyOS hvigor 接管，此文件仅保留以免 Gradle 报错。
 // 主构建请使用: npm run build 或 hvigorw assembleHap
-// 原 Android 构建配置已弃用，见 build.gradle.bak（若需恢复可重命名）
+// 下方 buildscript 用于构建 Android APK（需同时取消 settings.gradle 中 include ':app', ':daogenerator'）
+
+buildscript {
+    repositories { google(); mavenCentral() }
+    dependencies { classpath 'com.android.tools.build:gradle:7.2.2' }
+}
 
 allprojects {
     repositories {
         google()
         mavenCentral()
+        maven { url 'https://jitpack.io' }
     }
 }
 

@@ -1,3 +1,4 @@
 // HarmonyOS 工程：主构建由 hvigor 接管，不再包含 Android 模块。
 // Android 源码保留在 app/、daogenerator/ 仅作参考，不参与构建。
-// include ':app', ':daogenerator'
+// 下方取消注释以构建 Android APK：
+include ':app', ':daogenerator'

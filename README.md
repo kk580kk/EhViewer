@@ -20,6 +20,8 @@ An E-Hentai Application for **HarmonyOS** (OpenHarmony).
 
 本项目为 **HarmonyOS 工程**，主构建产物为可安装的 **HAP 包**。
 
+编译环境说明（含 DevEco Studio 安装路径等）见 [docs/编译环境说明.md](docs/编译环境说明.md)。
+
 **1. 配置 SDK 路径**
 
 在项目根目录创建或编辑 `local.properties`（若不存在），设置 OpenHarmony / HarmonyOS SDK 目录：
@@ -32,7 +34,10 @@ hwsdk.dir=/path/to/your/OpenHarmony/Sdk
 
 **2. 构建 HAP 安装包**
 
+需先安装 **DevEco Studio**（ohpm 随其提供）：<https://developer.harmonyos.com/cn/develop/deveco-studio>
+
 ```bash
+# 在 DevEco Studio 自带的终端或已配置 ohpm 的终端中执行：
 # 安装依赖（首次或依赖变更时）
 npm install
 ohpm install

@@ -1,13 +1,8 @@
 {
-  "apiType": "stageMode",
-  "buildOption": {},
-  "targets": [{ "name": "default", "runtimeOS": "HarmonyOS" }],
   "app": {
-    // Release 可安装包需在此配置签名（或于 DevEco Studio 中配置）；signingConfigs 为空时仅生成 unsigned HAP，可用于 debug 安装。勿提交证书与密码。
     "signingConfigs": [],
     "products": [{ "name": "default", "signingConfig": "default", "compatibleSdkVersion": "5.0.0(12)", "runtimeOS": "HarmonyOS" }],
     "buildModeSet": [{ "name": "debug" }, { "name": "release" }]
   },
-  "modules": [{ "name": "entry", "srcPath": "./entry", "targets": [{ "name": "default", "applyToProducts": ["default"] }] }],
-  "subProjects": ["entry"]
+  "modules": [{ "name": "entry", "srcPath": "./entry", "targets": [{ "name": "default", "applyToProducts": ["default"] }] }]
 }
